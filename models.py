@@ -1,4 +1,5 @@
 import psycopg2
+import psycopg2.extras
 from config import *
 
 class Database:
@@ -9,7 +10,7 @@ class Database:
             user=DATABASE_USER,
             password=DATABASE_PASSWORD
         )
-        self.cursor = self.connection.cursor()
+        self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     def execute(self, query, params=()):
         self.cursor.execute(query, params)
@@ -17,7 +18,13 @@ class Database:
 
     def fetch(self, query, params=()):
         self.cursor.execute(query, params)
-        return self.cursor.fetchall()
+        result = self.cursor.fetchall()
+        return [dict(row) for row in result]
+
+    def fetch_one(self, query, params=()):
+        self.cursor.execute(query, params)
+        result = self.cursor.fetchone()
+        return dict(result)
 
     def __del__(self):
         self.cursor.close()
@@ -44,12 +51,12 @@ CREATE TABLE department (
 
 CREATE TABLE student (
     id SERIAL PRIMARY KEY,
-    student_no VARCHAR(255) NOT NULL,
+    student_no VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
+    password VARCHAR(1023) NOT NULL, 
     department_id INTEGER NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    UNIQUE (student_no),
     CONSTRAINT FK_StudentDepartment FOREIGN KEY (department_id) REFERENCES department(id)
 );
 
@@ -71,7 +78,7 @@ CREATE TABLE enrollment (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL,
     course_id INTEGER NOT NULL,
-    is_pass BOOLEAN NOT NULL DEFAULT FALSE,
+    is_pass BOOLEAN,
     pass_date TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (student_id, course_id),
@@ -127,4 +134,4 @@ CREATE TABLE bundle_detail (
 if __name__ == "__main__":
     db = Database()
     db.execute(create_tables)
-    db.__del__()
+    del db
