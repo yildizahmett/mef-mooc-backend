@@ -23,8 +23,8 @@ class Database:
 
     def fetch_one(self, query, params=()):
         self.cursor.execute(query, params)
-        result = self.cursor.fetchone()
-        return dict(result)
+        result = dict(self.cursor.fetchone()) if self.cursor.rowcount > 0 else None
+        return result
 
     def __del__(self):
         self.cursor.close()
@@ -36,7 +36,9 @@ create_tables = """
 CREATE TABLE coordinator (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    surname VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
+    password VARCHAR(1023) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -53,6 +55,7 @@ CREATE TABLE student (
     id SERIAL PRIMARY KEY,
     student_no VARCHAR(255) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
+    surname VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     password VARCHAR(1023) NOT NULL, 
     department_id INTEGER NOT NULL,
@@ -70,6 +73,7 @@ CREATE TABLE MEFcourse (
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     department_id INTEGER NOT NULL,
     coordinator_id INTEGER NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     CONSTRAINT FK_MEFcourseDepartment FOREIGN KEY (department_id) REFERENCES department(id),
     CONSTRAINT FK_MEFcourseCoordinator FOREIGN KEY (coordinator_id) REFERENCES coordinator(id)
 );
@@ -89,7 +93,7 @@ CREATE TABLE enrollment (
 CREATE TABLE bundle (
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    coordinator_id INTEGER NOT NULL,
+    coordinator_id INTEGER,
     enrollment_id INTEGER NOT NULL,
     status VARCHAR(255) NOT NULL DEFAULT 'Waiting Bundle',
     CONSTRAINT FK_BundleCoordinator FOREIGN KEY (coordinator_id) REFERENCES coordinator(id),
@@ -123,6 +127,7 @@ CREATE TABLE bundle_detail (
     id SERIAL PRIMARY KEY,
     bundle_id INTEGER NOT NULL,
     mooc_id INTEGER NOT NULL,
+    certificate_url TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (bundle_id, mooc_id),
     CONSTRAINT FK_BundleDetailBundle FOREIGN KEY (bundle_id) REFERENCES bundle(id),
