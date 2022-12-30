@@ -1,5 +1,7 @@
+import random
+import string
 from flask import request, jsonify
-from flask_jwt_extended import create_access_token, get_jwt
+from flask_jwt_extended import create_access_token, get_jwt, jwt_required
 
 from util import *
 from auth import student_auth, coordinator_auth, admin_auth
@@ -9,6 +11,7 @@ from init import app, jwt, bcrypt, db
 #=======================================  GENERAL  =====================================================
 
 @app.route("/all-departments", methods=['GET'])
+@jwt_required()
 def all_departments():
     try:
         departments = db.fetch("SELECT * FROM department")
@@ -18,6 +21,7 @@ def all_departments():
         return {"message": "An error occured"}, 500
 
 @app.route("/all-coordinators", methods=['GET'])
+@jwt_required()
 def all_coordinators():
     try:
         coordinators = db.fetch("SELECT id, name FROM coordinator")
@@ -114,6 +118,10 @@ def student_enroll():
 
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot enroll in this course"}, 400
+
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
+        if enrollment:
+            return {"message": "You are already enrolled in this course"}, 400
 
         db.execute("INSERT INTO enrollment (student_id, course_id) VALUES (%s, %s)", (student_id, course_id))
         return {"message": "Enrolled successfully"}, 200
@@ -220,7 +228,8 @@ def student_create_bundle(course_id):
             """
             SELECT * FROM bundle WHERE enrollment_id = %s
                                  AND (status = 'Waiting Bundles' OR status = 'Waiting Certificates'
-                                 OR status = 'Rejected Certificates' OR status = 'Accepted Certificates')
+                                 OR status = 'Rejected Certificates' OR status = 'Accepted Certificates'
+                                 OR status = 'Waiting Approval')
             """,
             (enrollment["id"],)
         )
@@ -357,7 +366,7 @@ def student_complete_bundle(course_id, bundle_id):
             if not bundle_detail['certificate_url']:
                 return {"message": "You cannot complete this bundle"}, 400
 
-        db.execute("UPDATE bundle SET status = 'Waiting Certificates' WHERE id = %s", (bundle_id,))
+        db.execute("UPDATE bundle SET status = 'Waiting Approval' WHERE id = %s", (bundle_id,))
 
         return {"message": "Bundle completed successfully"}, 200
     except Exception as e:
@@ -374,7 +383,7 @@ def coordinator_login():
         email = data['email']
         password = data['password']
 
-        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE email = %s LIMIT 1", (email,))
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE email = %s and is_active = True LIMIT 1", (email,))
         if not coordinator:
             return {"message": "Invalid credentials"}, 401
 
@@ -416,9 +425,141 @@ def admin_login():
         print(e)
         return {"message": "An error occured"}, 500
 
+@app.route("/admin/add-coordinator", methods=['POST'])
+@admin_auth()
+def add_coordinator():
+    try:
+        data = request.get_json()
+        name = data['name']
+        surname = data['surname']
+        email = data['email']
+        password = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
-@app.route("/student/create-bundle", methods=['GET'])
-@student_auth()
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE email = %s LIMIT 1", (email,))
+        if coordinator:
+            return {"message": "Coordinator already exists"}, 400
+
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+
+        db.execute("INSERT INTO coordinator (name, surname, email, password) VALUES (%s, %s, %s, %s)", (name, surname, email, hashed_password))
+
+        # TODO: Send email to coordinator
+
+        return {"message": f"Coordinator added successfully. Password: {password}"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/admin/coordinators", methods=['GET'])
+@admin_auth()
+def get_coordinators():
+    try:
+        coordinators = db.fetch("""
+                                SELECT coordinator.id, coordinator.name, coordinator.surname, coordinator.email, department.name as department_name 
+                                FROM coordinator 
+                                LEFT JOIN department ON coordinator.id = department.coordinator_id
+                                """)
+        return {"coordinators": coordinators}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/admin/coordinators/<int:coordinator_id>/passive", methods=['GET'])
+@admin_auth()
+def delete_coordinator(coordinator_id):
+    try:
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s LIMIT 1", (coordinator_id,))
+        if not coordinator:
+            return {"message": "Coordinator not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+        if department:
+            return {"message": "You cannot delete this coordinator"}, 400
+
+        db.execute("UPDATE coordinator SET is_active = False WHERE id = %s", (coordinator_id,))
+
+        return {"message": "Coordinator deleted successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/admin/departments", methods=['GET'])
+@admin_auth()
+def get_departments():
+    try:
+        departments = db.fetch("""SELECT department.id, department.name, coordinator.name as coordinator_name, coordinator.surname as coordinator_surname 
+                                  FROM department
+                                  INNER JOIN coordinator ON department.coordinator_id = coordinator.id
+                                  """)
+        return {"departments": departments}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/admin/add-department", methods=['POST'])
+@admin_auth()
+def add_department():
+    try:
+        data = request.get_json()
+        name = data['name']
+        coordinator_id = data['coordinator_id']
+
+        department = db.fetch_one("SELECT * FROM department WHERE name = %s LIMIT 1", (name,))
+        if department:
+            return {"message": "Department already exists"}, 400
+
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = False LIMIT 1", (coordinator_id,))
+        if not coordinator:
+            return {"message": "Coordinator not found"}, 404
+
+        db.execute("UPDATE coordinator SET is_active = True WHERE id = %s", (coordinator_id,))
+        db.execute("INSERT INTO department (name, coordinator_id) VALUES (%s, %s)", (name, coordinator_id))
+
+        return {"message": "Department added successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/admin/passive-coordinators", methods=['GET'])
+@admin_auth()
+def get_passive_coordinators():
+    try:
+        coordinators = db.fetch("SELECT id, CONCAT(name, ' ', surname) as coordinator_name FROM coordinator WHERE is_active = False")
+        return {"coordinators": coordinators}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/admin/departments/<int:department_id>/change-coordinator", methods=['POST'])
+@admin_auth()
+def change_coordinator(department_id):
+    try:
+        data = request.get_json()
+        coordinator_id = data['coordinator_id']
+
+        department = db.fetch_one("SELECT * FROM department WHERE id = %s LIMIT 1", (department_id,))
+        if not department:
+            return {"message": "Department not found"}, 404
+
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = False LIMIT 1", (coordinator_id,))
+        if not coordinator:
+            return {"message": "Coordinator not found"}, 404
+
+        if department['coordinator_id']:
+            db.execute("UPDATE coordinator SET is_active = False WHERE id = %s", (department['coordinator_id'],))
+
+        db.execute("UPDATE coordinator SET is_active = True WHERE id = %s", (coordinator_id,))
+        db.execute("UPDATE department SET coordinator_id = %s WHERE id = %s", (coordinator_id, department_id))
+        return {"message": "Coordinator changed successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+
+
+
+
+@app.route("/deneme", methods=['GET'])
 def create_bundle():
     return "Selamlar"
 

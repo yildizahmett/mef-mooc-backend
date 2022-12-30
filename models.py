@@ -37,9 +37,9 @@ CREATE TABLE coordinator (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     surname VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(1023) NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -134,6 +134,13 @@ CREATE TABLE bundle_detail (
     CONSTRAINT FK_BundleDetailMooc FOREIGN KEY (mooc_id) REFERENCES mooc(id)
 );
 
+"""
+
+mooc_data = """
+COPY mooc(platform, name, university, difficulty_level, course_ratio, average_hours, url, description, skills_learned, specialization, specialization_course_order, specialization_url, spezialization_description, course_language, course_id, specialization_id, graded_peer_review) 
+FROM '/home/berkay/Desktop/MEFmooc/mooc_data.csv' 
+DELIMITER ',' 
+CSV HEADER;
 """
 
 if __name__ == "__main__":
