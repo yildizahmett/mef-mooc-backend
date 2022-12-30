@@ -104,11 +104,11 @@ CREATE TABLE mooc (
     id SERIAL PRIMARY KEY,
     platform VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    university VARCHAR(255) NOT NULL,
-    difficulty_level VARCHAR(255) NOT NULL,
-    course_ratio FLOAT NOT NULL,
-    average_hours FLOAT NOT NULL,
-    url VARCHAR(1023) NOT NULL,
+    university VARCHAR(255),
+    difficulty_level VARCHAR(255),
+    course_ratio FLOAT,
+    average_hours FLOAT,
+    url VARCHAR(1023),
     description TEXT,
     skills_learned TEXT,
     specialization VARCHAR(255),
@@ -117,7 +117,7 @@ CREATE TABLE mooc (
     spezialization_description TEXT,
     course_language VARCHAR(255),
     course_id VARCHAR(255) UNIQUE,
-    specialization_id VARCHAR(255) UNIQUE,
+    specialization_id VARCHAR(255),
     graded_peer_review INTEGER,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -137,9 +137,9 @@ CREATE TABLE bundle_detail (
 """
 
 mooc_data = """
-COPY mooc(platform, name, university, difficulty_level, course_ratio, average_hours, url, description, skills_learned, specialization, specialization_course_order, specialization_url, spezialization_description, course_language, course_id, specialization_id, graded_peer_review) 
-FROM '/home/berkay/Desktop/MEFmooc/mooc_data.csv' 
-DELIMITER ',' 
+COPY mooc(platform, name, url) 
+FROM 'C:\\Users\\yildi\\Desktop\\mooc_data.csv' 
+DELIMITER ';' 
 CSV HEADER;
 """
 

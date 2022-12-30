@@ -197,7 +197,7 @@ def student_moocs():
         if not student:
             return {"message": "Student not found"}, 404
 
-        moocs = db.fetch("SELECT * FROM mooc WHERE is_active = True")
+        moocs = db.fetch("SELECT id, platform, name, url FROM mooc WHERE is_active = True")
         return {"moocs": moocs}, 200
     except Exception as e:
         print(e)
@@ -282,7 +282,7 @@ def student_bundle(course_id, bundle_id):
 
         bundles = db.fetch(
             """
-            SELECT bd.id as bundle_detail_id, m.id as mooc_id, m.name as mooc_name
+            SELECT bd.id as bundle_detail_id, m.id as mooc_id, m.name as mooc_name, certificate_url
             FROM bundle_detail bd
             INNER JOIN mooc m ON m.id = bd.mooc_id
             WHERE bd.bundle_id = %s
