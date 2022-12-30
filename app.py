@@ -11,7 +11,6 @@ from init import app, jwt, bcrypt, db
 #=======================================  GENERAL  =====================================================
 
 @app.route("/all-departments", methods=['GET'])
-@jwt_required()
 def all_departments():
     try:
         departments = db.fetch("SELECT * FROM department")
@@ -21,7 +20,6 @@ def all_departments():
         return {"message": "An error occured"}, 500
 
 @app.route("/all-coordinators", methods=['GET'])
-@jwt_required()
 def all_coordinators():
     try:
         coordinators = db.fetch("SELECT id, name FROM coordinator")
