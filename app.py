@@ -33,7 +33,7 @@ def all_coordinators():
 
 @app.route("/student/register", methods=['POST'])
 def student_register():
-
+    try:
         data = request.get_json()
         student_no = data['student_no']
         name = data['name']
@@ -49,7 +49,9 @@ def student_register():
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
         db.execute("INSERT INTO student (student_no, name, surname, email, password, department_id) VALUES (%s, %s, %s, %s, %s, %s)", (student_no, name, surname, email, hashed_password, department_id))
         return {"message": "Student created successfully"}, 200
-
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
 
 @app.route("/student/login", methods=['POST'])
 def student_login():
