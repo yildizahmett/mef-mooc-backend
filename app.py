@@ -3,6 +3,7 @@ import string
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, get_jwt, jwt_required
 
+from config import SEMESTERS
 from util import *
 from auth import student_auth, coordinator_auth, admin_auth
 from init import app, jwt, bcrypt, db
@@ -385,10 +386,10 @@ def coordinator_login():
 
         coordinator = db.fetch_one("SELECT * FROM coordinator WHERE email = %s and is_active = True LIMIT 1", (email,))
         if not coordinator:
-            return {"message": "Invalid credentials"}, 401
+            return {"message": "Invalid credentials or coordinator disabled"}, 401
 
         if not bcrypt.check_password_hash(coordinator['password'], password):
-            return {"message": "Invalid credentials"}, 401
+            return {"message": "Invalid credentials or coordinator disabled"}, 401
 
         token_identity = {
             'type': 'coordinator',
@@ -397,6 +398,167 @@ def coordinator_login():
 
         access_token = create_access_token(identity=token_identity)
         return {"access_token": access_token}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/possible-semesters", methods=['GET'])
+@coordinator_auth()
+def coordinator_possible_semesters():
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        return {"semesters": SEMESTERS}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/add-course", methods=['POST'])
+@coordinator_auth()
+def coordinator_add_course():
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        data = request.get_json()
+        course_code = data['course_code']
+        name = data['name']
+        type = data['type']
+        semester = data['semester']
+        credits = data['credits']
+
+        db.execute("INSERT INTO MEFcourse (course_code, name, type, semester, credits, department_id, coordinator_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", 
+                    (course_code, name, type, semester, credits, coordinator['department_id'], coordinator_id))
+
+        return {"message": "Course added successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/course/<int:course_id>/passive", methods=['POST'])
+@coordinator_auth()
+def coordinator_passive_course(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s and is_active = True LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        if course['department_id'] != coordinator['department_id']:
+            return {"message": "You cannot view this course"}, 400
+
+        db.execute("UPDATE MEFcourse SET is_active = False WHERE id = %s", (course_id,))
+
+        return {"message": "Course passed successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/active-courses", methods=['GET'])
+@coordinator_auth()
+def coordinator_active_courses():
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = True", (coordinator['department_id'],))
+        return {"courses": courses}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/inactive-courses", methods=['GET'])
+@coordinator_auth()
+def coordinator_inactive_courses():
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = False", (coordinator['department_id'],))
+        return {"courses": courses}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/course/<int:course_id>/students", methods=['GET'])
+@coordinator_auth()
+def coordinator_course(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        if course['department_id'] != coordinator['department_id']:
+            return {"message": "You cannot view this course"}, 400
+
+        # get course students
+        students = db.fetch("""
+                            SELECT student.id, student.name, student.surname, student.email, student.student_no
+                            FROM student
+                            INNER JOIN enrollment ON student.id = enrollment.student_id
+                            WHERE enrollment.course_id = %s
+        """, (course_id,))
+
+        return {"students": students}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/course/<int:course_id>/waiting-bundles", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_waiting_bundles(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        if course['department_id'] != coordinator['department_id']:
+            return {"message": "You cannot view this course"}, 400
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, 
+                                   m.url as mooc_url
+                            FROM student s
+                            INNER JOIN enrollment e ON student.id = enrollment.student_id
+                            INNER JOIN bundle b ON enrollment.id = bundle.enrollment_id
+                            INNER JOIN bundle_details bd ON bundle.id = bundle_details.bundle_id
+                            INNER JOIN mooc m ON bundle_details.mooc_id = mooc.id
+                            WHERE bundle.status = %s and enrollment.course_id = %s
+        """, ("Waiting Bundle", course_id,))
+
+        return {"bundles": bundles}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
