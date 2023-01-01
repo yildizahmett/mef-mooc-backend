@@ -469,7 +469,7 @@ def coordinator_passive_course(course_id):
 
         db.execute("UPDATE MEFcourse SET is_active = False WHERE id = %s", (course_id,))
 
-        return {"message": "Course passed successfully"}, 200
+        return {"message": "Course passived successfully"}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
@@ -488,7 +488,7 @@ def coordinator_active_courses():
         if not department:
             return {"message": "Department not found or department disabled"}, 404
 
-        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s", (department['id'],))
+        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = True", (department['id'],))
         return {"courses": courses}, 200
     except Exception as e:
         print(e)
