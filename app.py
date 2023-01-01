@@ -23,7 +23,7 @@ def all_departments():
 @app.route("/all-coordinators", methods=['GET'])
 def all_coordinators():
     try:
-        coordinators = db.fetch("SELECT id, name FROM coordinator")
+        coordinators = db.fetch("SELECT id, CONCAT(name, ' ', surname) FROM coordinator")
         return {"coordinators": coordinators}, 200
     except Exception as e:
         print(e)
