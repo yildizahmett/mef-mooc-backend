@@ -427,6 +427,10 @@ def coordinator_add_course():
         if not coordinator:
             return {"message": "Coordinator not found or coordinator disabled"}, 404
 
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s and is_active = True LIMIT 1", (coordinator['id'],))
+        if not department:
+            return {"message": "Department not found or department disabled"}, 404
+
         data = request.get_json()
         course_code = data['course_code']
         name = data['name']
@@ -435,7 +439,7 @@ def coordinator_add_course():
         credits = data['credits']
 
         db.execute("INSERT INTO MEFcourse (course_code, name, type, semester, credits, department_id, coordinator_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", 
-                    (course_code, name, type, semester, credits, coordinator['department_id'], coordinator_id))
+                    (course_code, name, type, semester, credits, department['id'], coordinator_id))
 
         return {"message": "Course added successfully"}, 200
     except Exception as e:
