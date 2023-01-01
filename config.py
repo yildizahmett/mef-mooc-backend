@@ -12,6 +12,10 @@ ADMIN_USERNAME='admin'
 ADMIN_PASSWORD='admin'
 JWT_ACCESS_TOKEN_EXPIRES=7200
 SEMESTERS = semesters["semesters"]
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 587
+MAIL_USERNAME = 'mefmooc@gmail.com'
+MAIL_PASSWORD = 'Ay2945349*'
 
 BUNDLE_STATUS = {
     'waiting-bundles': 'Waiting Bundle',
