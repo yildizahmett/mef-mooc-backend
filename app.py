@@ -564,7 +564,7 @@ def coordinator_course_waiting_bundles(course_id, status):
         if course['department_id'] != department['id']:
             return {"message": "You cannot view this course"}, 400
 
-        hashed_status = BUNDLE_STATUS[status]
+        hashed_status = BUNDLE_STATUS.get(status)
 
         if not hashed_status:
             return {"message": "Status not found"}, 404
