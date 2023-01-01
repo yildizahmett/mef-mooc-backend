@@ -460,7 +460,11 @@ def coordinator_passive_course(course_id):
         if not course:
             return {"message": "Course not found"}, 404
 
-        if course['department_id'] != coordinator['department_id']:
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
+        if not department:
+            return {"message": "Department not found or department disabled"}, 404
+
+        if course['department_id'] != department['id']:
             return {"message": "You cannot view this course"}, 400
 
         db.execute("UPDATE MEFcourse SET is_active = False WHERE id = %s", (course_id,))
