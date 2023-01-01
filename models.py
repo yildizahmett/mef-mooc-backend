@@ -46,7 +46,7 @@ CREATE TABLE coordinator (
 CREATE TABLE department (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    coordinator_id INTEGER UNIQUE,
+    coordinator_id INTEGER UNIQUE NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     CONSTRAINT FK_DepartmentCoordinator FOREIGN KEY (coordinator_id) REFERENCES coordinator(id)
 );

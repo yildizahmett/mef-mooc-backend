@@ -512,10 +512,11 @@ def coordinator_course(course_id):
         if not course:
             return {"message": "Course not found"}, 404
 
-        if course['department_id'] != coordinator['department_id']:
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
             return {"message": "You cannot view this course"}, 400
 
-        # get course students
         students = db.fetch("""
                             SELECT student.id, student.name, student.surname, student.email, student.student_no
                             FROM student
@@ -542,7 +543,9 @@ def coordinator_course_waiting_bundles(course_id, status):
         if not course:
             return {"message": "Course not found"}, 404
 
-        if course['department_id'] != coordinator['department_id']:
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
             return {"message": "You cannot view this course"}, 400
 
         hashed_status = BUNDLE_STATUS[status]
@@ -554,7 +557,7 @@ def coordinator_course_waiting_bundles(course_id, status):
         bundles = db.fetch("""
                             SELECT s.name as student_name, s.surname as student_surname, s.email as student_email, 
                                    s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, 
-                                   m.url as mooc_url
+                                   m.url as mooc_url, bd.certificate_url
                             FROM student s
                             INNER JOIN enrollment e ON student.id = enrollment.student_id
                             INNER JOIN bundle b ON enrollment.id = bundle.enrollment_id
