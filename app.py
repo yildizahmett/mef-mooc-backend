@@ -427,7 +427,7 @@ def coordinator_add_course():
         if not coordinator:
             return {"message": "Coordinator not found or coordinator disabled"}, 404
 
-        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s and is_active = True LIMIT 1", (coordinator['id'],))
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
         if not department:
             return {"message": "Department not found or department disabled"}, 404
 
