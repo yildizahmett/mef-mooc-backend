@@ -588,6 +588,134 @@ def coordinator_course_waiting_bundles(course_id, status):
         print(e)
         return {"message": "An error occured"}, 500
 
+@app.route("/coordinator/course/<int:course_id>/bundle/<int:bundle_id>/approve-bundle", methods=['POST'])
+@coordinator_auth()
+def coordinator_approve_bundle(course_id, bundle_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+
+        if bundle['status'] != BUNDLE_STATUS['waiting-bundles']:
+            return {"message": "Bundle is not waiting for approval"}, 400
+
+        db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['waiting-certificates'], bundle_id))
+        return {"message": "Bundle approved"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/course/<int:course_id>/bundle/<int:bundle_id>/reject-bundle", methods=['POST'])
+@coordinator_auth()
+def coordinator_reject_bundle(course_id, bundle_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+
+        if bundle['status'] != BUNDLE_STATUS['waiting-bundles']:
+            return {"message": "Bundle is not waiting for approval"}, 400
+
+        db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['rejected-bundles'], bundle_id))
+        return {"message": "Bundle rejected"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/course/<int:course_id>/bundle/<int:bundle_id>/approve-certificate", methods=['POST'])
+@coordinator_auth()
+def coordinator_approve_certificate(course_id, bundle_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+
+        if bundle['status'] != BUNDLE_STATUS['waiting-approval']:
+            return {"message": "Bundle is not waiting for certificate approval"}, 400
+
+        db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['accepted-certificates'], bundle_id))
+        return {"message": "Certificate approved"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@app.route("/coordinator/course/<int:course_id>/bundle/<int:bundle_id>/reject-certificate", methods=['POST'])
+@coordinator_auth()
+def coordinator_reject_certificate(course_id, bundle_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+
+        if bundle['status'] != BUNDLE_STATUS['waiting-approval']:
+            return {"message": "Bundle is not waiting for certificate approval"}, 400
+
+        db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['rejected-certificates'], bundle_id))
+        return {"message": "Certificate rejected"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
 #=======================================================================================================
 #========================================== ADMIN ======================================================
 
