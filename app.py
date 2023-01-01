@@ -575,11 +575,11 @@ def coordinator_course_waiting_bundles(course_id, status):
                                    s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, 
                                    m.url as mooc_url, bd.certificate_url
                             FROM student s
-                            INNER JOIN enrollment e ON student.id = enrollment.student_id
-                            INNER JOIN bundle b ON enrollment.id = bundle.enrollment_id
-                            INNER JOIN bundle_details bd ON bundle.id = bundle_details.bundle_id
-                            INNER JOIN mooc m ON bundle_details.mooc_id = mooc.id
-                            WHERE bundle.status = %s and enrollment.course_id = %s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_details bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            WHERE b.status = %s and e.course_id = %s
                             ORDER BY b.created_at DESC
         """, (hashed_status, course_id,))
 
