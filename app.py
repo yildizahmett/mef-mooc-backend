@@ -480,7 +480,11 @@ def coordinator_active_courses():
         if not coordinator:
             return {"message": "Coordinator not found or coordinator disabled"}, 404
 
-        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = True", (coordinator['department_id'],))
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
+        if not department:
+            return {"message": "Department not found or department disabled"}, 404
+
+        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s", (department['id'],))
         return {"courses": courses}, 200
     except Exception as e:
         print(e)
@@ -496,7 +500,11 @@ def coordinator_inactive_courses():
         if not coordinator:
             return {"message": "Coordinator not found or coordinator disabled"}, 404
 
-        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = False", (coordinator['department_id'],))
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
+        if not department:
+            return {"message": "Department not found or department disabled"}, 404
+
+        courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = False", (department['id'],))
         return {"courses": courses}, 200
     except Exception as e:
         print(e)
