@@ -3,7 +3,7 @@ import string
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, get_jwt, jwt_required
 
-from config import SEMESTERS
+from config import SEMESTERS, BUNDLE_STATUS
 from util import *
 from auth import student_auth, coordinator_auth, admin_auth
 from init import app, jwt, bcrypt, db
@@ -23,7 +23,7 @@ def all_departments():
 @app.route("/all-coordinators", methods=['GET'])
 def all_coordinators():
     try:
-        coordinators = db.fetch("SELECT id, CONCAT(name, ' ', surname) FROM coordinator")
+        coordinators = db.fetch("SELECT id, CONCAT(name, ' ', surname) as name FROM coordinator")
         return {"coordinators": coordinators}, 200
     except Exception as e:
         print(e)
@@ -397,7 +397,7 @@ def coordinator_login():
         }
 
         access_token = create_access_token(identity=token_identity)
-        return {"access_token": access_token}, 200
+        return {"access_token": access_token, "coordinator_name": coordinator["name"] + " " + coordinator["surname"]}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
@@ -528,9 +528,9 @@ def coordinator_course(course_id):
         print(e)
         return {"message": "An error occured"}, 500
 
-@app.route("/coordinator/course/<int:course_id>/waiting-bundles", methods=['GET'])
+@app.route("/coordinator/course/<int:course_id>/<status>", methods=['GET'])
 @coordinator_auth()
-def coordinator_course_waiting_bundles(course_id):
+def coordinator_course_waiting_bundles(course_id, status):
     try:
         coordinator_id = get_jwt()['sub']['id']
         coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
@@ -545,6 +545,11 @@ def coordinator_course_waiting_bundles(course_id):
         if course['department_id'] != coordinator['department_id']:
             return {"message": "You cannot view this course"}, 400
 
+        hashed_status = BUNDLE_STATUS[status]
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
         # TODO: Get total bundle hours
         bundles = db.fetch("""
                             SELECT s.name as student_name, s.surname as student_surname, s.email as student_email, 
@@ -556,9 +561,10 @@ def coordinator_course_waiting_bundles(course_id):
                             INNER JOIN bundle_details bd ON bundle.id = bundle_details.bundle_id
                             INNER JOIN mooc m ON bundle_details.mooc_id = mooc.id
                             WHERE bundle.status = %s and enrollment.course_id = %s
-        """, ("Waiting Bundle", course_id,))
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
 
-        return {"bundles": bundles}, 200
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
@@ -626,7 +632,7 @@ def get_coordinators():
         print(e)
         return {"message": "An error occured"}, 500
 
-@app.route("/admin/coordinators/<int:coordinator_id>/passive", methods=['GET'])
+@app.route("/admin/coordinators/<int:coordinator_id>/passive", methods=['POST'])
 @admin_auth()
 def delete_coordinator(coordinator_id):
     try:
