@@ -7,7 +7,6 @@ from config import SEMESTERS, BUNDLE_STATUS
 from util import *
 from auth import student_auth, coordinator_auth, admin_auth
 from init import app, jwt, bcrypt, db
-from mail import *
 
 #=======================================================================================================
 #=======================================  GENERAL  =====================================================
@@ -759,7 +758,7 @@ def add_coordinator():
 
         db.execute("INSERT INTO coordinator (name, surname, email, password) VALUES (%s, %s, %s, %s)", (name, surname, email, hashed_password))
 
-        
+
 
         return {"message": f"Coordinator added successfully. Password: {password}"}, 200
     except Exception as e:
