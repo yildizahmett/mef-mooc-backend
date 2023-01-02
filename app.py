@@ -759,10 +759,7 @@ def add_coordinator():
 
         db.execute("INSERT INTO coordinator (name, surname, email, password) VALUES (%s, %s, %s, %s)", (name, surname, email, hashed_password))
 
-        # Send email
-        mail = Mail()
-        mail.send(email, "MEF Coordinator Account", f"Your account has been created. Your password is {password}.\nNOTE: Your account will be activated soon.")
-        del mail
+        
 
         return {"message": f"Coordinator added successfully. Password: {password}"}, 200
     except Exception as e:
