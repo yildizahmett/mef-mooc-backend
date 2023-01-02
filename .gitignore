@@ -1,5 +1,4 @@
 
 *.pyc
 credentials.json
-mail.py
 quickstart.py
