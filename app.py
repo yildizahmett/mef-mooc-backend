@@ -776,7 +776,7 @@ def add_coordinator():
 
         db.execute("INSERT INTO coordinator (name, surname, email, password) VALUES (%s, %s, %s, %s)", (name, surname, email, hashed_password))
 
-
+        print("Coordinator added successfully. Password: " + password)
 
         return {"message": f"Coordinator added successfully. Password: {password}"}, 200
     except Exception as e:
