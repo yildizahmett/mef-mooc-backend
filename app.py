@@ -686,7 +686,7 @@ def coordinator_approve_certificate(course_id, bundle_id):
         if not enrollment:
             return {"message": "Student not enrolled in this course"}, 400
 
-        db.execute("UPDATE enrollment SET is_pass = True, pass_date = NOW() WHERE id = %s", (enrollment['id']))
+        db.execute("UPDATE enrollment SET is_pass = True, pass_date = NOW() WHERE id = %s", (enrollment['id'],))
         db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['accepted-certificates'], bundle_id))
         return {"message": "Certificate approved"}, 200
     except Exception as e:
@@ -726,7 +726,7 @@ def coordinator_reject_certificate(course_id, bundle_id):
         if not enrollment:
             return {"message": "Student not enrolled in this course"}, 400
 
-        db.execute("UPDATE enrollment SET is_pass = False, pass_date = NOW() WHERE id = %s", (enrollment['id']))
+        db.execute("UPDATE enrollment SET is_pass = False, pass_date = NOW() WHERE id = %s", (enrollment['id'],))
 
         db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['rejected-certificates'], bundle_id))
         return {"message": "Certificate rejected"}, 200
