@@ -74,6 +74,7 @@ CREATE TABLE MEFcourse (
     department_id INTEGER NOT NULL,
     coordinator_id INTEGER NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (course_code, semester, course_name),
     CONSTRAINT FK_MEFcourseDepartment FOREIGN KEY (department_id) REFERENCES department(id),
     CONSTRAINT FK_MEFcourseCoordinator FOREIGN KEY (coordinator_id) REFERENCES coordinator(id)
 );
