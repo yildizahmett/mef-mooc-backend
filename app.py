@@ -228,7 +228,7 @@ def student_create_bundle(course_id):
         bundles = db.fetch(
             """
             SELECT * FROM bundle WHERE enrollment_id = %s
-                                 AND (status = 'Waiting Bundles' OR status = 'Waiting Certificates'
+                                 AND (status = 'Waiting Bundle' OR status = 'Waiting Certificates'
                                  OR status = 'Rejected Certificates' OR status = 'Accepted Certificates'
                                  OR status = 'Waiting Approval')
             """,
