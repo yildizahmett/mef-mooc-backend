@@ -572,7 +572,7 @@ def coordinator_course_waiting_bundles(course_id, status):
         # TODO: Get total bundle hours
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, 
+                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, e.pass_date,
                                    m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
