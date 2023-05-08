@@ -4,9 +4,9 @@ from flask import request, jsonify
 from flask_jwt_extended import create_access_token, get_jwt, jwt_required
 
 from config import SEMESTERS, BUNDLE_STATUS
-from util import *
-from auth import student_auth, coordinator_auth, admin_auth
-from init import app, jwt, bcrypt, db
+from scripts.util import *
+from scripts.auth import student_auth, coordinator_auth, admin_auth
+from scripts.init import app, jwt, bcrypt, db
 
 #=======================================================================================================
 #=======================================  GENERAL  =====================================================
@@ -897,4 +897,4 @@ def create_bundle():
     return "Selamlar"
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
