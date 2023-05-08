@@ -8,7 +8,8 @@ class Database:
             host=DATABASE_HOST,
             database=DATABASE_NAME,
             user=DATABASE_USER,
-            password=DATABASE_PASSWORD
+            password=DATABASE_PASSWORD,
+            port=DATABASE_PORT
         )
         self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
 

@@ -8,6 +8,8 @@ services:
       POSTGRES_DB: mefmooc
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Ay2945349*
+    volumes:
+      - /Users/yildizah/Documents/GitHub/mef-mooc-backend/postgres-data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     restart: always
@@ -25,10 +27,3 @@ services:
       - "5672:5672"
     restart: always
 
-  backend:
-    build:
-      context: .
-      dockerfile: backend.dockerfile
-    ports:
-      - 5001:5001
-    restart: always

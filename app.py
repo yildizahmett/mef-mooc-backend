@@ -3,7 +3,6 @@ import string
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, get_jwt, jwt_required
 
-from config import SEMESTERS, BUNDLE_STATUS
 from scripts.util import *
 from scripts.auth import student_auth, coordinator_auth, admin_auth
 from scripts.init import app, jwt, bcrypt, db
