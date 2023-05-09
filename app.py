@@ -3,6 +3,7 @@ import string
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, get_jwt, jwt_required
 
+from config import FLASK_PORT, FLASK_HOST
 from scripts.util import *
 from scripts.auth import student_auth, coordinator_auth, admin_auth
 from scripts.init import app, jwt, bcrypt, db
@@ -887,13 +888,5 @@ def change_coordinator(department_id):
         print(e)
         return {"message": "An error occured"}, 500
 
-
-
-
-
-@app.route("/deneme", methods=['GET'])
-def create_bundle():
-    return "Selamlar"
-
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host=FLASK_HOST, port=FLASK_PORT, debug=True)
