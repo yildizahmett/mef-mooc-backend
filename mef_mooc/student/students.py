@@ -1,43 +1,22 @@
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt
+from flask_jwt_extended import create_access_token, get_jwt
 from flask_bcrypt import generate_password_hash
 from mef_mooc.scripts.auth import student_auth
 from mef_mooc.scripts.models import db
 from mef_mooc.scripts.extensions import jwt, bcrypt
+from mef_mooc.scripts.util import create_random_password, send_mail_queue
 from mef_mooc.scripts.constants import TOTAL_COURSE_TIME_TOLLERANCE, HOURS_PER_CREDIT
 
 student_app = Blueprint('student_app', __name__, url_prefix='/student')
-
-@student_app.route("/register", methods=['POST'])
-def student_register():
-    try:
-        data = request.get_json()
-        student_no = data['student_no']
-        name = data['name']
-        surname = data['surname']
-        email = data['email']
-        password = data['password']
-        department_id = data['department_id']
-
-        student = db.fetch_one("SELECT * FROM student WHERE student_no = %s LIMIT 1", (student_no,))
-        if student:
-            return {"message": "Student already exists"}, 400
-
-        hashed_password = generate_password_hash(password).decode('utf-8')
-        db.execute("INSERT INTO student (student_no, name, surname, email, password, department_id) VALUES (%s, %s, %s, %s, %s, %s)", (student_no, name, surname, email, hashed_password, department_id))
-        return {"message": "Student created successfully"}, 200
-    except Exception as e:
-        print(e)
-        return {"message": "An error occured"}, 500
 
 @student_app.route("/login", methods=['POST'])
 def student_login():
     try:
         data = request.get_json()
-        student_no = data['student_no']
+        email = data['email']
         password = data['password']
 
-        student = db.fetch_one("SELECT * FROM student WHERE student_no = %s LIMIT 1", (student_no,))
+        student = db.fetch_one("SELECT * FROM student WHERE email = %s LIMIT 1", (email,))
         if not student:
             return {"message": "Invalid credentials"}, 401
 
@@ -49,8 +28,73 @@ def student_login():
             'id': student['id']
         }
 
-        access_token = bcrypt.create_access_token(identity=token_identity)
+        access_token = create_access_token(identity=token_identity)
         return {"access_token": access_token}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@student_app.route("/forgot-password", methods=['POST'])
+def student_forgot_password():
+    try:
+        data = request.get_json()
+        email = data['email']
+        student = db.fetch_one("SELECT * FROM student WHERE email = %s LIMIT 1", (email,))
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        password = create_random_password()
+        hashed_password = generate_password_hash(password).decode('utf-8')
+        db.execute("UPDATE student SET password = %s WHERE id = %s", (hashed_password, student['id']))
+        send_mail_queue(
+            email, 
+            "MEF MOOC Şifre Sıfırlama", 
+            "MEF MOOC şifreniz başarıyla sıfırlandı.\nYeni Şifreniz: " + password)
+        
+        return {"message": "Password reset mail sent"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@student_app.route("/profile", methods=['GET'])
+@student_auth()
+def student_profile():
+    try:
+        student_id = get_jwt()['sub']['id']
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (student_id,))
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE id = %s LIMIT 1", (student['department_id'],))
+        student['department'] = department["name"]
+
+        # REMOVE PASSWORD
+        del student['password']
+
+        return {"student": student}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@student_app.route("/change-password", methods=['POST'])
+@student_auth() 
+def student_change_password():
+    try:
+        data = request.get_json()
+        student_id = get_jwt()['sub']['id']
+        old_password = data['old_password']
+        new_password = data['new_password']
+
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (student_id,))
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        if not bcrypt.check_password_hash(student['password'], old_password):
+            return {"message": "Invalid credentials"}, 401
+
+        hashed_password = generate_password_hash(new_password).decode('utf-8')
+        db.execute("UPDATE student SET password = %s WHERE id = %s", (hashed_password, student['id']))
+        return {"message": "Password changed"}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500

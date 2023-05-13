@@ -30,6 +30,7 @@ def main():
 
 if __name__ == '__main__':
     try:
+        print(' [*] Waiting for messages. To exit press CTRL+C')
         main()
     except KeyboardInterrupt:
         print('Interrupted')

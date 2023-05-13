@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 from flask_jwt_extended import create_access_token, get_jwt
-from flask_bcrypt import check_password_hash
-from mef_mooc.scripts.util import SEMESTERS, BUNDLE_STATUS
+from flask_bcrypt import check_password_hash, generate_password_hash
+from mef_mooc.scripts.util import SEMESTERS, BUNDLE_STATUS, create_random_password, send_mail_queue
 from mef_mooc.scripts.auth import coordinator_auth
 from mef_mooc.scripts.models import db
 
@@ -28,6 +28,80 @@ def coordinator_login():
 
         access_token = create_access_token(identity=token_identity)
         return {"access_token": access_token, "coordinator_name": coordinator["name"] + " " + coordinator["surname"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/forgot-password", methods=['POST'])
+def coordinator_forgot_password():
+    try:
+        data = request.get_json()
+        email = data['email']
+
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE email = %s and is_active = True LIMIT 1", (email,))
+        if not coordinator:
+            return {"message": "Invalid credentials or coordinator disabled"}, 401
+
+        password = create_random_password()
+        hashed_password = generate_password_hash(password).decode('utf-8')
+
+        db.execute("UPDATE coordinator SET password = %s WHERE id = %s", (hashed_password, coordinator['id']))
+
+        send_mail_queue(
+            email,
+            "MEF MOOC Şifre Sıfırlama",
+            "MEF MOOC şifreniz başarıyla sıfırlandı.\nYeni şifreniz: " + password
+        )
+
+        return {"message": "Password reset successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/change-password", methods=['POST'])
+@coordinator_auth()
+def coordinator_change_password():
+    try:
+        data = request.get_json()
+        old_password = data['old_password']
+        new_password = data['new_password']
+
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        if not check_password_hash(coordinator['password'], old_password):
+            return {"message": "Invalid credentials"}, 401
+
+        hashed_password = generate_password_hash(new_password).decode('utf-8')
+        db.execute("UPDATE coordinator SET password = %s WHERE id = %s", (hashed_password, coordinator['id']))
+
+        return {"message": "Password changed successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/profile", methods=['GET'])
+@coordinator_auth()
+def coordinator_profile():
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+        
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
+        if not department:
+            return {"message": "Department not found"}, 404
+        
+        coordinator['department'] = department["name"]
+
+        # REMOVE PASSWORD
+        del coordinator['password']
+
+        return {"coordinator": coordinator}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
