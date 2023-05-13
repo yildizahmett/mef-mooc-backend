@@ -1,6 +1,6 @@
 import smtplib
 from email.mime.text import MIMEText
-from config import SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD
+from mef_mooc.config import SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD
 
 def send_mail(subject, message, receiver_mail):
     smtp_server = SMTP_SERVER

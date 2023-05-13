@@ -1,7 +1,10 @@
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from os import getenv
 
-load_dotenv()
+try:
+    load_dotenv(find_dotenv('../.env'))
+except:
+    exit('Could not load .env file')
 
 FLASK_HOST = getenv('FLASK_HOST')
 FLASK_PORT = getenv('FLASK_PORT')
@@ -15,7 +18,7 @@ DATABASE_PORT = getenv('DATABASE_PORT')
 ADMIN_USERNAME = getenv('ADMIN_USERNAME')
 ADMIN_PASSWORD = getenv('ADMIN_PASSWORD')
 
-JWT_ACCESS_TOKEN_EXPIRES = getenv('JWT_ACCESS_TOKEN_EXPIRES')
+JWT_ACCESS_TOKEN_EXPIRES = int(getenv('JWT_ACCESS_TOKEN_EXPIRES'))
 JWT_SECRET_KEY = getenv('JWT_SECRET_KEY')
 
 SMTP_SERVER = getenv('SMTP_SERVER')
@@ -24,3 +27,5 @@ SMTP_USERNAME = getenv('SMTP_USERNAME')
 SMTP_PASSWORD = getenv('SMTP_PASSWORD')
 
 RABBITMQ_HOST = getenv('RABBITMQ_HOST')
+
+

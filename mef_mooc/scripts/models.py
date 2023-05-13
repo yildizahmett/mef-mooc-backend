@@ -1,6 +1,6 @@
 import psycopg2
 import psycopg2.extras
-from config import *
+from mef_mooc.config import DATABASE_HOST, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_PORT
 
 class Database:
     def __init__(self):
@@ -138,14 +138,4 @@ CREATE TABLE bundle_detail (
 
 """
 
-mooc_data = """
-COPY mooc(platform, name, url) 
-FROM 'C:\\Users\\yildi\\Desktop\\mooc_data.csv' 
-DELIMITER ';' 
-CSV HEADER;
-"""
-
-if __name__ == "__main__":
-    db = Database()
-    db.execute(create_tables)
-    del db
+db = Database()

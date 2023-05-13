@@ -2,8 +2,8 @@ import pika
 import sys
 import os
 import time
-from config import RABBITMQ_HOST
-from scripts.mail_sender import send_mail
+from mef_mooc.config import RABBITMQ_HOST
+from mef_mooc.scripts.mail_sender import send_mail
 
 def main():
     connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
