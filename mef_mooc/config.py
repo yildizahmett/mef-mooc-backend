@@ -28,4 +28,8 @@ SMTP_PASSWORD = getenv('SMTP_PASSWORD')
 
 RABBITMQ_HOST = getenv('RABBITMQ_HOST')
 
+REDIS_HOST = getenv('REDIS_HOST')
+REDIS_PORT = int(getenv('REDIS_PORT'))
+REDIS_DB = int(getenv('REDIS_DB'))
+
 

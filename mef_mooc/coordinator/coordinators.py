@@ -4,6 +4,8 @@ from flask_bcrypt import check_password_hash, generate_password_hash
 from mef_mooc.scripts.util import SEMESTERS, BUNDLE_STATUS, create_random_password, send_mail_queue
 from mef_mooc.scripts.auth import coordinator_auth
 from mef_mooc.scripts.models import db
+from mef_mooc.scripts.extensions import jwt_redis_blocklist
+from mef_mooc.config import JWT_ACCESS_TOKEN_EXPIRES
 
 coordinator_app = Blueprint('coordinator_app', __name__, url_prefix='/coordinator')
 
@@ -28,6 +30,17 @@ def coordinator_login():
 
         access_token = create_access_token(identity=token_identity)
         return {"access_token": access_token, "coordinator_name": coordinator["name"] + " " + coordinator["surname"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/logout", methods=['POST'])
+@coordinator_auth()
+def coordinator_logout():
+    try:
+        jti = get_jwt()['jti']
+        jwt_redis_blocklist.set(jti, "", JWT_ACCESS_TOKEN_EXPIRES)
+        return {"message": "Logged out successfully"}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
@@ -293,6 +306,102 @@ def coordinator_course_waiting_bundles(course_id, status):
         print(e)
         return {"message": "An error occured"}, 500
 
+@coordinator_app.route("/moocs", methods=['GET'])
+@coordinator_auth()
+def coordinator_moocs():
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        moocs = db.fetch("SELECT id, platform, name, url FROM mooc WHERE is_active = True")
+
+        return {"moocs": moocs}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_bundle(course_id, bundle_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        bundle = db.fetch_one("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name,
+                                   m.url as mooc_url, bd.certificate_url, bd.id as bundle_detail_id
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
+                            WHERE b.id = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (bundle_id, course_id,))
+
+        return {"bundle": bundle}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/bundle-detail/<int:bundle_detail_id>/update-mooc", methods=['POST'])
+@coordinator_auth()
+def coordinator_update_mooc(course_id, bundle_id, bundle_detail_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+        
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s and enrollment_id = %s LIMIT 1", (bundle_id, course_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+        
+        bundle_detail = db.fetch_one("SELECT * FROM bundle_detail WHERE id = %s and bundle_id = %s LIMIT 1", (bundle_detail_id, bundle_id,))
+        if not bundle_detail:
+            return {"message": "Bundle detail not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        data = request.get_json()
+        mooc_id = data["mooc_id"]
+
+        mooc = db.fetch_one("SELECT * FROM mooc WHERE id = %s LIMIT 1", (mooc_id,))
+        if not mooc:
+            return {"message": "Mooc not found"}, 404
+        
+        db.execute("UPDATE bundle_detail SET mooc_id = %s WHERE id = %s", (mooc_id, bundle_detail_id,))
+
+        return {"message": "Mooc updated"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
 @coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/approve-bundle", methods=['POST'])
 @coordinator_auth()
 def coordinator_approve_bundle(course_id, bundle_id):
@@ -437,3 +546,4 @@ def coordinator_reject_certificate(course_id, bundle_id):
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
+    

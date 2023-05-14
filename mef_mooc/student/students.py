@@ -3,9 +3,10 @@ from flask_jwt_extended import create_access_token, get_jwt
 from flask_bcrypt import generate_password_hash
 from mef_mooc.scripts.auth import student_auth
 from mef_mooc.scripts.models import db
-from mef_mooc.scripts.extensions import jwt, bcrypt
+from mef_mooc.scripts.extensions import jwt, bcrypt, jwt_redis_blocklist
 from mef_mooc.scripts.util import create_random_password, send_mail_queue
 from mef_mooc.scripts.constants import TOTAL_COURSE_TIME_TOLLERANCE, HOURS_PER_CREDIT
+from mef_mooc.config import JWT_ACCESS_TOKEN_EXPIRES
 
 student_app = Blueprint('student_app', __name__, url_prefix='/student')
 
@@ -30,6 +31,17 @@ def student_login():
 
         access_token = create_access_token(identity=token_identity)
         return {"access_token": access_token}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@student_app.route("/logout", methods=['POST'])
+@student_auth()
+def student_logout():
+    try:
+        jti = get_jwt()['jti']
+        jwt_redis_blocklist.set(jti, '', JWT_ACCESS_TOKEN_EXPIRES)
+        return {"message": "Successfully logged out"}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
@@ -391,7 +403,9 @@ def student_complete_bundle(course_id, bundle_id):
             if not bundle_detail['certificate_url']:
                 return {"message": "You cannot complete this bundle"}, 400
 
-        db.execute("UPDATE bundle SET status = 'Waiting Approval' WHERE id = %s", (bundle_id,))
+        data = request.get_json()
+        comment = data['comment']
+        db.execute("UPDATE bundle SET status = 'Waiting Approval' and comment = '%s' WHERE id = %s", (bundle_id, comment,))
 
         return {"message": "Bundle completed successfully"}, 200
     except Exception as e:

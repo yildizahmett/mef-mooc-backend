@@ -1,13 +1,14 @@
 from flask import Blueprint, request
 from flask_bcrypt import generate_password_hash
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, get_jwt
 import random
 import string
 from mef_mooc.scripts.auth import admin_auth
 from mef_mooc.scripts.models import db
 from mef_mooc.scripts.util import create_random_password, student_invite_mail_queue, send_mail_queue
 from mef_mooc.scripts.constants import FRONTEND_URL
-from mef_mooc.config import ADMIN_USERNAME, ADMIN_PASSWORD
+from mef_mooc.config import ADMIN_USERNAME, ADMIN_PASSWORD, JWT_ACCESS_TOKEN_EXPIRES
+from mef_mooc.scripts.extensions import jwt_redis_blocklist
 
 admin_app = Blueprint('admin_app', __name__, url_prefix='/admin')
 
@@ -27,6 +28,17 @@ def admin_login():
 
         access_token = create_access_token(identity=token_identity)
         return {"access_token": access_token}, 200
+
+@admin_app.route("/logout", methods=['POST'])
+@admin_auth()
+def admin_logout():
+    try:
+        jti = get_jwt()['jti']
+        jwt_redis_blocklist.set(jti, '', JWT_ACCESS_TOKEN_EXPIRES)
+        return {"message": "Successfully logged out"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "Something went wrong"}, 500
 
 @admin_app.route("/invite-students", methods=['POST'])
 @admin_auth()

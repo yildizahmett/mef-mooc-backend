@@ -98,6 +98,7 @@ CREATE TABLE bundle (
     coordinator_id INTEGER,
     enrollment_id INTEGER NOT NULL,
     status VARCHAR(255) NOT NULL DEFAULT 'Waiting Bundle',
+    comment VARCHAR(2047),
     CONSTRAINT FK_BundleCoordinator FOREIGN KEY (coordinator_id) REFERENCES coordinator(id),
     CONSTRAINT FK_BundleEnrollment FOREIGN KEY (enrollment_id) REFERENCES enrollment(id)
 );
