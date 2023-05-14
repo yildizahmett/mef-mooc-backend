@@ -304,3 +304,81 @@ def get_coordinator(coordinator_id):
         print(e)
         return {"message": "An error occured"}, 500
 
+@admin_app.route("/moocs", methods=['GET'])
+@admin_auth()
+def get_moocs():
+    try:
+        moocs = db.fetch("""
+                        SELECT mooc.id, mooc.name, mooc.url, mooc.average_hours 
+                        FROM mooc
+                        """)
+        return {"moocs": moocs}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@admin_app.route("/add-moocs", methods=['POST'])
+@admin_auth()
+def add_moocs():
+    try:
+        data = request.get_json()
+        moocs = data['moocs']
+
+        query = "INSERT INTO mooc (name, url, average_hours) VALUES "
+        mooc_check_count = 0
+        for mooc in moocs:
+            mooc_check = db.fetch_one("SELECT * FROM mooc WHERE name = %s LIMIT 1", (mooc['name'],))
+            if mooc_check:
+                mooc_check_count += 1
+                continue
+            
+            query += f"('{mooc['name']}', '{mooc['url']}', {mooc['average_hours']}),"
+
+        if mooc_check_count == len(moocs):
+            return {"message": "All moocs already exists"}, 400
+        
+        query = query[:-1]
+        db.execute(query)
+
+        return {"message": "MOOC added successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@admin_app.route("/mooc/<int:mooc_id>", methods=['GET'])
+@admin_auth()
+def get_mooc(mooc_id):
+    try:
+        mooc = db.fetch_one("""
+                            SELECT mooc.id, mooc.name, mooc.url, mooc.average_hours 
+                            FROM mooc
+                            WHERE mooc.id = %s LIMIT 1
+                            """, (mooc_id,))
+        if not mooc:
+            return {"message": "MOOC not found"}, 404
+        
+        return {"mooc": mooc}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@admin_app.route("/mooc/<int:mooc_id>/update", methods=['POST'])
+@admin_auth()
+def update_mooc(mooc_id):
+    try:
+        data = request.get_json()
+
+        name = data['name']
+        url = data['url']
+        average_hours = data['average_hours']
+
+        mooc = db.fetch_one("SELECT * FROM mooc WHERE id = %s LIMIT 1", (mooc_id,))
+        if not mooc:
+            return {"message": "MOOC not found"}, 404
+        
+        db.execute("UPDATE mooc SET name = %s, url = %s, average_hours = %s WHERE id = %s", (name, url, average_hours, mooc_id))
+
+        return {"message": "MOOC updated successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500

@@ -105,7 +105,7 @@ CREATE TABLE bundle (
 
 CREATE TABLE mooc (
     id SERIAL PRIMARY KEY,
-    platform VARCHAR(255) NOT NULL,
+    platform VARCHAR(255),
     name VARCHAR(255) NOT NULL,
     university VARCHAR(255),
     difficulty_level VARCHAR(255),
