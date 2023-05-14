@@ -251,11 +251,18 @@ def change_coordinator(department_id):
 @admin_auth()
 def get_students():
     try:
-        students = db.fetch("""
+        try:
+            data = request.get_json()
+            student_no = data['student_no']
+        except:
+            student_no = ""
+
+        students = db.fetch(f"""
                             SELECT student.id, student.name, student.surname, student.email, student.student_no, department.name as department_name 
                             FROM student 
                             LEFT JOIN department ON student.department_id = department.id
-                            """)
+                            WHERE student.student_no like '%%{student_no}%%'
+                            """, (student_no,))
         return {"students": students}, 200
     except Exception as e:
         print(e)
