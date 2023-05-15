@@ -84,6 +84,7 @@ CREATE TABLE enrollment (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL,
     course_id INTEGER NOT NULL,
+    is_waiting BOOLEAN NOT NULL DEFAULT FALSE,
     is_pass BOOLEAN,
     pass_date TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),

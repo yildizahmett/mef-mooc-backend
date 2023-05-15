@@ -231,6 +231,122 @@ def coordinator_inactive_courses():
         print(e)
         return {"message": "An error occured"}, 500
 
+@coordinator_app.route("/course/<int:course_id>/waiting-students", methods=['GET'])
+@coordinator_auth()
+def coordinator_waiting_students(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        students = db.fetch("""
+                            SELECT a.id, a.name, a.surname, a.email, a.student_no, 
+                            e.pass_date, m.course_code, m.name as course_name, m.credits, m.semester
+                            FROM (SELECT student.id, student.name, 
+                                student.surname, student.email, student.student_no
+                            FROM student
+                            INNER JOIN enrollment ON student.id = enrollment.student_id
+                            WHERE enrollment.course_id = %s and enrollment.is_waiting = True) a
+                            LEFT JOIN enrollment e ON e.student_id = a.id
+                            INNER JOIN mefcourse m ON e.course_id = m.id
+                            WHERE is_pass = True
+        """, (course_id,))
+        return {"students": students}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/waiting-students/accept", methods=['POST'])
+@coordinator_auth()
+def coordinator_accept_waiting_students(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        data = request.get_json()
+        student_id = data['student_id']
+
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (student_id,))
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        is_waiting_enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = True LIMIT 1", (student_id, course_id))
+        if not is_waiting_enrollment:
+            return {"message": "Student is not waiting for this course"}, 400
+        
+        db.execute("UPDATE enrollment SET is_waiting = False WHERE student_id = %s and course_id = %s", (student_id, course_id))
+        return {"message": "Student accepted"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/waiting-students/reject", methods=['POST'])
+@coordinator_auth()
+def coordinator_reject_waiting_students(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        data = request.get_json()
+        student_id = data['student_id']
+        coordinator_message = data['message']
+
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (student_id,))
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        is_waiting_enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = True LIMIT 1", (student_id, course_id))
+        if not is_waiting_enrollment:
+            return {"message": "Student is not waiting for this course"}, 400
+        
+        db.execute("DELETE FROM enrollment WHERE student_id = %s and course_id = %s", (student_id, course_id))
+
+        try:
+            send_mail_queue(student['email'], "Course Enrollment", 
+                            f"Your enrollment request for {course['name']} has been rejected by MOOC Coordinator.\n\nCoordinator Message: {coordinator_message}")
+        except:
+            pass
+        
+        return {"message": "Student rejected"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
 @coordinator_app.route("/course/<int:course_id>/students", methods=['GET'])
 @coordinator_auth()
 def coordinator_course(course_id):
@@ -254,7 +370,7 @@ def coordinator_course(course_id):
                             SELECT student.id, student.name, student.surname, student.email, student.student_no
                             FROM student
                             INNER JOIN enrollment ON student.id = enrollment.student_id
-                            WHERE enrollment.course_id = %s
+                            WHERE enrollment.course_id = %s and enrollment.is_waiting = False
         """, (course_id,))
 
         return {"students": students}, 200

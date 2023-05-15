@@ -121,12 +121,15 @@ def student_courses():
         if not student:
             return {"message": "Student not found"}, 404
 
-        courses = db.fetch(
-            """SELECT id, name, course_code
-               FROM MEFcourse
-               WHERE department_id = %s and is_active = True
+        courses = db.fetch("""
+                            SELECT id, name, course_code
+                            FROM MEFcourse m
+                            WHERE m.department_id = %s and m.is_active = True
+                                and NOT EXISTS(SELECT 1 FROM enrollment
+                                                WHERE enrollment.student_id = %s
+                                                and enrollment.course_id = m.id)
             """,
-            (student['department_id'],)
+            (student['department_id'], student_id,)
         )
         return {"courses": courses}, 200
     except Exception as e:
@@ -145,18 +148,24 @@ def student_enroll():
         if not student:
             return {"message": "Student not found"}, 404
 
-        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s and is_active = True LIMIT 1", (course_id,))
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s and department_id = %s and is_active = True LIMIT 1", (course_id, student['department_id'],))
         if not course:
             return {"message": "Course not found"}, 404
-
-        if course['department_id'] != student['department_id']:
-            return {"message": "You cannot enroll in this course"}, 400
 
         enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
         if enrollment:
             return {"message": "You are already enrolled in this course"}, 400
+        
+        number_of_passed_courses = db.fetch_one("""
+                                                SELECT COUNT(*) FROM enrollment
+                                                WHERE student_id = 1 and is_pass = True
+        """, (student_id,))['count']
 
-        db.execute("INSERT INTO enrollment (student_id, course_id) VALUES (%s, %s)", (student_id, course_id))
+        if number_of_passed_courses == 0:
+            db.execute("INSERT INTO enrollment (student_id, course_id) VALUES (%s, %s)", (student_id, course_id))
+        else:
+            db.execute("INSERT INTO enrollment (student_id, course_id, is_waiting) VALUES (%s, %s, %s)", (student_id, course_id, "True"))
+
         return {"message": "Enrolled successfully"}, 200
     except Exception as e:
         print(e)
@@ -173,7 +182,7 @@ def student_enrollments():
             return {"message": "Student not found"}, 404
 
         enrollments = db.fetch(
-            """SELECT e.id as enrolment_id, c.id as course_id, c.name, c.course_code
+            """SELECT e.id as enrolment_id, e.is_passed, e.is_waiting, c.id as course_id, c.name, c.course_code
                FROM enrollment e
                INNER JOIN MEFcourse c ON c.id = e.course_id
                WHERE e.student_id = %s and c.is_active = True
@@ -202,7 +211,7 @@ def student_enrollment_bundles(course_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = False LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
 
@@ -253,7 +262,7 @@ def student_create_bundle(course_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = False LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
 
@@ -313,7 +322,7 @@ def student_bundle(course_id, bundle_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = False LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
 
@@ -322,9 +331,10 @@ def student_bundle(course_id, bundle_id):
             SELECT bd.id as bundle_detail_id, m.id as mooc_id, m.name as mooc_name, certificate_url
             FROM bundle_detail bd
             INNER JOIN mooc m ON m.id = bd.mooc_id
-            WHERE bd.bundle_id = %s
+            INNER JOIN bundle b ON b.id = bd.bundle_id
+            WHERE bd.bundle_id = %s and b.enrollment_id = %s
             """,
-            (bundle_id,)
+            (bundle_id, enrollment["id"],)
         )
         return {"bundle": bundles}, 200
     except Exception as e:
@@ -348,7 +358,7 @@ def student_create_certificate(course_id, bundle_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = False LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
 
@@ -387,7 +397,7 @@ def student_complete_bundle(course_id, bundle_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s is_waiting = False LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
 
