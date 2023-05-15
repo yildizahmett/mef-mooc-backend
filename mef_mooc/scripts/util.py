@@ -25,7 +25,7 @@ def student_invite_mail_queue(students):
         connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
     except Exception as e:
         print(e)
-        return
+        raise e
     
     channel = connection.channel()
     channel.queue_declare(queue='mail_sending')
