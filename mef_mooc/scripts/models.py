@@ -1,3 +1,4 @@
+import uuid
 import psycopg2
 import psycopg2.extras
 from mef_mooc.config import DATABASE_HOST, DATABASE_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_PORT
@@ -12,11 +13,11 @@ class Database:
             port=DATABASE_PORT
         )
         self.cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        self.connection.autocommit = True
 
     def execute(self, query, params=()):
         self.cursor.execute(query, params)
-        self.connection.commit()
-
+        
     def fetch(self, query, params=()):
         self.cursor.execute(query, params)
         result = self.cursor.fetchall()
@@ -75,7 +76,7 @@ CREATE TABLE MEFcourse (
     department_id INTEGER NOT NULL,
     coordinator_id INTEGER NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (course_code, semester, name),
+    UNIQUE (course_code, semester, name, department_id),
     CONSTRAINT FK_MEFcourseDepartment FOREIGN KEY (department_id) REFERENCES department(id),
     CONSTRAINT FK_MEFcourseCoordinator FOREIGN KEY (coordinator_id) REFERENCES coordinator(id)
 );

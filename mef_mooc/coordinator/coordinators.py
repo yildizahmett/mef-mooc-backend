@@ -155,6 +155,10 @@ def coordinator_add_course():
         semester = data['semester']
         credits = data['credits']
 
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE course_code = %s and semester = %s and name = %s and department_id = %s LIMIT 1", (course_code, semester, name,department['id'],))
+        if course:
+            return {"message": "Course already exists"}, 400
+
         db.execute("INSERT INTO MEFcourse (course_code, name, type, semester, credits, department_id, coordinator_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", 
                     (course_code, name, type, semester, credits, department['id'], coordinator_id))
 
