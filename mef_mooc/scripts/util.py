@@ -3,7 +3,9 @@ import random
 import string
 from mef_mooc.scripts.constants import FRONTEND_URL
 
-SEMESTERS = ["2022-2023-Fall", "2022-2023-Spring", "2023-2024-Fall", "2023-2024-Spring", "2024-2025-Fall", "2024-2025-Spring"]
+SEMESTERS = ["2022-2023-Fall", "2022-2023-Spring", "2022-2023-Summer", "2023-2024-Fall", 
+             "2023-2024-Spring", "2023-2024-Summer", "2024-2025-Fall", "2024-2025-Spring", 
+             "2024-2025-Summer"]
 
 BUNDLE_STATUS = {
     'waiting-bundles': 'Waiting Bundle',
