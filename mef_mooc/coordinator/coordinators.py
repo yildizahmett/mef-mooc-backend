@@ -462,16 +462,15 @@ def coordinator_course_bundle(course_id, bundle_id):
         if course['department_id'] != department['id']:
             return {"message": "You cannot view this course"}, 400
 
-        bundle = db.fetch_one("""
+        bundle = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name,
+                                   s.student_no, b.id as bundle_id, m.name as mooc_name, m.id as mooc_id, b.comment,
                                    m.url as mooc_url, bd.certificate_url, bd.id as bundle_detail_id
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id
                             INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
                             INNER JOIN mooc m ON bd.mooc_id = m.id
-                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
                             WHERE b.id = %s and e.course_id = %s
                             ORDER BY b.created_at DESC
         """, (bundle_id, course_id,))
@@ -495,7 +494,7 @@ def coordinator_update_mooc(course_id, bundle_id, bundle_detail_id):
         if not course:
             return {"message": "Course not found"}, 404
         
-        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s and enrollment_id = %s LIMIT 1", (bundle_id, course_id,))
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
         if not bundle:
             return {"message": "Bundle not found"}, 404
         
@@ -518,6 +517,160 @@ def coordinator_update_mooc(course_id, bundle_id, bundle_detail_id):
         db.execute("UPDATE bundle_detail SET mooc_id = %s WHERE id = %s", (mooc_id, bundle_detail_id,))
 
         return {"message": "Mooc updated"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/bundle-detail/<int:bundle_detail_id>/update-certificate", methods=['POST'])
+@coordinator_auth()
+def coordinator_update_certificate(course_id, bundle_id, bundle_detail_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+        
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+        
+        bundle_detail = db.fetch_one("SELECT * FROM bundle_detail WHERE id = %s and bundle_id = %s LIMIT 1", (bundle_detail_id, bundle_id,))
+        if not bundle_detail:
+            return {"message": "Bundle detail not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        data = request.get_json()
+        certificate_url = data["certificate_url"]
+
+        db.execute("UPDATE bundle_detail SET certificate_url = %s WHERE id = %s", (certificate_url, bundle_detail_id,))
+
+        return {"message": "Certificate updated"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/bundle-detail/<int:bundle_detail_id>/delete-mooc", methods=['POST'])
+@coordinator_auth()
+def coordinator_delete_mooc(course_id, bundle_id, bundle_detail_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+        
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+        
+        bundle_detail = db.fetch_one("SELECT * FROM bundle_detail WHERE id = %s and bundle_id = %s LIMIT 1", (bundle_detail_id, bundle_id,))
+        if not bundle_detail:
+            return {"message": "Bundle detail not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+        
+        number_of_mooc = db.fetch_one("SELECT COUNT(*) FROM bundle_detail WHERE bundle_id = %s", (bundle_id,))['count']
+        if number_of_mooc == 1:
+            return {"message": "You cannot delete the last mooc in a bundle"}, 400
+
+        db.execute("DELETE FROM bundle_detail WHERE id = %s", (bundle_detail_id,))
+
+        return {"message": "Mooc deleted"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/bundle-detail/<int:bundle_detail_id>/add-mooc", methods=['POST'])
+@coordinator_auth()
+def coordinator_add_mooc(course_id, bundle_id, bundle_detail_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+        
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+        
+        bundle_detail = db.fetch_one("SELECT * FROM bundle_detail WHERE id = %s and bundle_id = %s LIMIT 1", (bundle_detail_id, bundle_id,))
+        if not bundle_detail:
+            return {"message": "Bundle detail not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+        
+        data = request.get_json()
+        mooc_id = data["mooc_id"]
+
+        mooc = db.fetch_one("SELECT * FROM mooc WHERE id = %s LIMIT 1", (mooc_id,))
+        if not mooc:
+            return {"message": "Mooc not found"}, 404
+
+        all_moocs = db.fetch("SELECT * FROM bundle_detail WHERE bundle_id = %s", (bundle_id,))
+        for mooc in all_moocs:
+            if mooc['mooc_id'] == mooc_id:
+                return {"message": "Mooc already in bundle"}, 400
+        
+        db.execute("INSERT INTO bundle_detail (bundle_id, mooc_id) VALUES (%s, %s)", (bundle_id, mooc_id,))
+
+        return {"message": "Mooc added"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/update-comment", methods=['POST'])
+@coordinator_auth()
+def coordinator_update_comment(course_id, bundle_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+        
+        bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
+        if not bundle:
+            return {"message": "Bundle not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+        
+        data = request.get_json()
+        comment = data["comment"]
+
+        db.execute("UPDATE bundle SET comment = %s WHERE id = %s", (comment, bundle_id,))
+
+        return {"message": "Comment updated"}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
