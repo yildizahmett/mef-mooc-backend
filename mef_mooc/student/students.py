@@ -152,6 +152,9 @@ def student_enroll():
         if not course:
             return {"message": "Course not found"}, 404
 
+        if course['department_id'] != student['department_id']:
+            return {"message": "You cannot enroll in this course"}, 400
+
         enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
         if enrollment:
             return {"message": "You are already enrolled in this course"}, 400

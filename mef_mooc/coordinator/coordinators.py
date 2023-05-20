@@ -596,7 +596,7 @@ def coordinator_delete_mooc(course_id, bundle_id, bundle_detail_id):
         print(e)
         return {"message": "An error occured"}, 500
     
-@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/bundle-detail/<int:bundle_detail_id>/add-mooc", methods=['POST'])
+@coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/add-mooc", methods=['POST'])
 @coordinator_auth()
 def coordinator_add_mooc(course_id, bundle_id, bundle_detail_id):
     try:
