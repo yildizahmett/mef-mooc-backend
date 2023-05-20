@@ -158,10 +158,17 @@ def student_enroll():
         
         number_of_passed_courses = db.fetch_one("""
                                                 SELECT COUNT(*) FROM enrollment
-                                                WHERE student_id = 1 and is_pass = True
+                                                WHERE student_id = %s and is_pass = True
         """, (student_id,))['count']
 
-        if number_of_passed_courses == 0:
+        number_of_enrolled_active_courses = db.fetch_one("""
+                                                SELECT COUNT(*)
+                                                FROM enrollment e
+                                                LEFT JOIN mefcourse m ON m.id = e.course_id
+                                                WHERE e.student_id = %s and m.is_active = True
+        """, (student_id,))['count']
+
+        if number_of_passed_courses + number_of_enrolled_active_courses == 0:
             db.execute("INSERT INTO enrollment (student_id, course_id) VALUES (%s, %s)", (student_id, course_id))
         else:
             db.execute("INSERT INTO enrollment (student_id, course_id, is_waiting) VALUES (%s, %s, %s)", (student_id, course_id, "True"))
@@ -182,7 +189,7 @@ def student_enrollments():
             return {"message": "Student not found"}, 404
 
         enrollments = db.fetch(
-            """SELECT e.id as enrolment_id, e.is_passed, e.is_waiting, c.id as course_id, c.name, c.course_code
+            """SELECT e.id as enrolment_id, e.is_waiting, c.id as course_id, c.name, c.course_code
                FROM enrollment e
                INNER JOIN MEFcourse c ON c.id = e.course_id
                WHERE e.student_id = %s and c.is_active = True
@@ -211,9 +218,12 @@ def student_enrollment_bundles(course_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = False LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
+        
+        if enrollment['is_waiting'] == True:
+            return {"message": "You are in the waiting list"}, 400
 
         bundles = db.fetch(
             """SELECT b.id as bundle_id, b.created_at, b.status as bundle_status, m.name, m.url
@@ -239,7 +249,7 @@ def student_moocs():
         if not student:
             return {"message": "Student not found"}, 404
 
-        moocs = db.fetch("SELECT id, platform, name, url FROM mooc WHERE is_active = True")
+        moocs = db.fetch("SELECT id, platform, name, url, average_hours FROM mooc WHERE is_active = True")
         return {"moocs": moocs}, 200
     except Exception as e:
         print(e)
@@ -280,13 +290,24 @@ def student_create_bundle(course_id):
 
         data = request.get_json()
         mooc_ids = data['mooc_ids']
-        total_course_time = data['total_course_time']
+        if len(mooc_ids) == 0:
+            return {"message": "You cannot create a bundle without moocs"}, 400
+        
+        total_course_time = 0
+        for mooc_id in mooc_ids:
+            mooc = db.fetch_one("SELECT * FROM mooc WHERE id = %s and is_active = True LIMIT 1", (mooc_id,))
+            if not mooc:
+                continue
+            total_course_time += mooc['average_hours']
+
+        if total_course_time == 0:
+            return {"message": "Some erros occures while average hours taking"}, 400
 
         moocs = db.fetch("SELECT * FROM mooc WHERE id IN %s and is_active = True", (tuple(mooc_ids),))
         if len(moocs) != len(mooc_ids):
             return {"message": "Invalid mooc ids"}, 400
         
-        if enrollment['credit'] * HOURS_PER_CREDIT * (1.0 - TOTAL_COURSE_TIME_TOLLERANCE) > total_course_time:
+        if course['credits'] * HOURS_PER_CREDIT * (1.0 - TOTAL_COURSE_TIME_TOLLERANCE) > total_course_time:
             return {"message": "Total course time is less than required"}, 400
         
         try:
@@ -397,7 +418,7 @@ def student_complete_bundle(course_id, bundle_id):
         if course['department_id'] != student['department_id']:
             return {"message": "You cannot view this course"}, 400
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s is_waiting = False LIMIT 1", (student_id, course_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE student_id = %s and course_id = %s and is_waiting = False LIMIT 1", (student_id, course_id))
         if not enrollment:
             return {"message": "You are not enrolled in this course"}, 400
 
@@ -415,7 +436,7 @@ def student_complete_bundle(course_id, bundle_id):
 
         data = request.get_json()
         comment = data['comment']
-        db.execute("UPDATE bundle SET status = 'Waiting Approval' and comment = '%s' WHERE id = %s", (bundle_id, comment,))
+        db.execute("UPDATE bundle SET status = 'Waiting Approval', comment = %s, complete_date = NOW() WHERE id = %s", (comment, bundle_id,))
 
         return {"message": "Bundle completed successfully"}, 200
     except Exception as e:

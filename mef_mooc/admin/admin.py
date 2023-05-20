@@ -50,7 +50,7 @@ def invite_students():
 
         for student in students:
             email = student['email']
-            password = create_random_password()
+            password = "asd123"
             student_no = student['student_no']
             name = student['name']
             surname = student['surname']
@@ -70,7 +70,7 @@ def invite_students():
             except Exception as e:
                 print(e)
 
-        student_invite_mail_queue(student_mail_list)
+        #student_invite_mail_queue(student_mail_list)
         return {"message": "Students invited"}, 200
     except Exception as e:
         print(e)
@@ -324,12 +324,18 @@ def add_moocs():
         data = request.get_json()
         moocs = data['moocs']
 
+        incorrect_moocs = []
+
         query = "INSERT INTO mooc (name, url, average_hours) VALUES "
         mooc_check_count = 0
         for mooc in moocs:
             mooc_check = db.fetch_one("SELECT * FROM mooc WHERE name = %s LIMIT 1", (mooc['name'],))
             if mooc_check:
                 mooc_check_count += 1
+                continue
+
+            if not mooc['name'] or not mooc['url'] or not mooc['average_hours']:
+                incorrect_moocs.append(mooc['name'])
                 continue
             
             query += f"('{mooc['name']}', '{mooc['url']}', {mooc['average_hours']}),"
@@ -339,6 +345,13 @@ def add_moocs():
         
         query = query[:-1]
         db.execute(query)
+
+        if incorrect_moocs:
+            report = "Following moocs are not added because of missing data: "
+            for mooc in incorrect_moocs:
+                report += mooc + ", "
+            report = report[:-2]
+            return {"message": "MOOC added successfully", "report": report}, 200
 
         return {"message": "MOOC added successfully"}, 200
     except Exception as e:

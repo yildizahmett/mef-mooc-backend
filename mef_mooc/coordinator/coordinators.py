@@ -255,17 +255,18 @@ def coordinator_waiting_students(course_id):
             return {"message": "You cannot view this course"}, 400
 
         students = db.fetch("""
-                            SELECT a.id, a.name, a.surname, a.email, a.student_no, 
-                            e.pass_date, m.course_code, m.name as course_name, m.credits, m.semester
+                            SELECT a.id as student_id, a.name, a.surname, a.email, a.student_no, 
+                            e.pass_date, m.id as course_id, m.course_code, m.name as course_name, m.credits, m.semester,
+                            m.is_active as is_course_active, e.is_pass as is_passed_course, e.is_waiting as is_waiting_enrollment
                             FROM (SELECT student.id, student.name, 
-                                student.surname, student.email, student.student_no
+                                student.surname, student.email, student.student_no, enrollment.is_waiting
                             FROM student
                             INNER JOIN enrollment ON student.id = enrollment.student_id
                             WHERE enrollment.course_id = %s and enrollment.is_waiting = True) a
                             LEFT JOIN enrollment e ON e.student_id = a.id
-                            INNER JOIN mefcourse m ON e.course_id = m.id
-                            WHERE is_pass = True
-        """, (course_id,))
+                            LEFT JOIN mefcourse m ON e.course_id = m.id
+                            WHERE (m.is_active = True OR e.is_pass = True) and (m.id != %s)
+        """, (course_id, course_id,))
         return {"students": students}, 200
     except Exception as e:
         print(e)
@@ -382,49 +383,49 @@ def coordinator_course(course_id):
         print(e)
         return {"message": "An error occured"}, 500
 
-@coordinator_app.route("/course/<int:course_id>/<status>", methods=['GET'])
-@coordinator_auth()
-def coordinator_course_waiting_bundles(course_id, status):
-    try:
-        coordinator_id = get_jwt()['sub']['id']
-        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+# @coordinator_app.route("/course/<int:course_id>/<status>", methods=['GET'])
+# @coordinator_auth()
+# def coordinator_course_all_reports(course_id, status):
+#     try:
+#         coordinator_id = get_jwt()['sub']['id']
+#         coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
 
-        if not coordinator:
-            return {"message": "Coordinator not found or coordinator disabled"}, 404
+#         if not coordinator:
+#             return {"message": "Coordinator not found or coordinator disabled"}, 404
 
-        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
-        if not course:
-            return {"message": "Course not found"}, 404
+#         course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+#         if not course:
+#             return {"message": "Course not found"}, 404
 
-        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+#         department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
 
-        if course['department_id'] != department['id']:
-            return {"message": "You cannot view this course"}, 400
+#         if course['department_id'] != department['id']:
+#             return {"message": "You cannot view this course"}, 400
 
-        hashed_status = BUNDLE_STATUS.get(status)
+#         hashed_status = BUNDLE_STATUS.get(status)
 
-        if not hashed_status:
-            return {"message": "Status not found"}, 404
+#         if not hashed_status:
+#             return {"message": "Status not found"}, 404
 
-        # TODO: Get total bundle hours
-        bundles = db.fetch("""
-                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, e.pass_date,
-                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.comment
-                            FROM student s
-                            INNER JOIN enrollment e ON s.id = e.student_id
-                            INNER JOIN bundle b ON e.id = b.enrollment_id
-                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
-                            INNER JOIN mooc m ON bd.mooc_id = m.id
-                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
-                            WHERE b.status = %s and e.course_id = %s
-                            ORDER BY b.created_at DESC
-        """, (hashed_status, course_id,))
+#         # TODO: Get total bundle hours
+#         bundles = db.fetch("""
+#                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+#                                    s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, e.pass_date,
+#                                    m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.comment
+#                             FROM student s
+#                             INNER JOIN enrollment e ON s.id = e.student_id
+#                             INNER JOIN bundle b ON e.id = b.enrollment_id
+#                             INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+#                             INNER JOIN mooc m ON bd.mooc_id = m.id
+#                             LEFT JOIN coordinator c ON b.coordinator_id = c.id
+#                             WHERE b.status = %s and e.course_id = %s
+#                             ORDER BY b.created_at DESC
+#         """, (hashed_status, course_id,))
 
-        return {"bundles": bundles, "is_active": course["is_active"]}, 200
-    except Exception as e:
-        print(e)
-        return {"message": "An error occured"}, 500
+#         return {"bundles": bundles, "is_active": course["is_active"]}, 200
+#     except Exception as e:
+#         print(e)
+#         return {"message": "An error occured"}, 500
 
 @coordinator_app.route("/moocs", methods=['GET'])
 @coordinator_auth()
@@ -548,7 +549,16 @@ def coordinator_approve_bundle(course_id, bundle_id):
         if bundle['status'] != BUNDLE_STATUS['waiting-bundles']:
             return {"message": "Bundle is not waiting for approval"}, 400
 
-        db.execute("UPDATE bundle SET status = %s, coordinator_id = %s WHERE id = %s", (BUNDLE_STATUS['waiting-certificates'], coordinator["id"], bundle_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE id = %s LIMIT 1", (bundle['enrollment_id'],))
+        if not enrollment:
+            return {"message": "Enrollment not found"}, 404
+
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (enrollment['student_id'],))
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        db.execute("UPDATE bundle SET status = %s, coordinator_id = %s, bundle_date = NOW() WHERE id = %s", (BUNDLE_STATUS['waiting-certificates'], coordinator["id"], bundle_id))
+        send_mail_queue(student['email'], "Bundle Approved", f"Your bundle for {course['name']} has been approved. You can start your courses.")
         return {"message": "Bundle approved"}, 200
     except Exception as e:
         print(e)
@@ -579,8 +589,18 @@ def coordinator_reject_bundle(course_id, bundle_id):
 
         if bundle['status'] != BUNDLE_STATUS['waiting-bundles']:
             return {"message": "Bundle is not waiting for approval"}, 400
+        
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE id = %s LIMIT 1", (bundle["enrollment_id"],))
+        if not enrollment:
+            return {"message": "Enrollment not found"}, 404
 
-        db.execute("UPDATE bundle SET status = %s, coordinator_id = %s WHERE id = %s", (BUNDLE_STATUS['rejected-bundles'], coordinator["id"], bundle_id))
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (enrollment["student_id"],))
+
+        data = request.get_json()
+        reason = data["reason"]
+
+        db.execute("UPDATE bundle SET status = %s, coordinator_id = %s, bundle_date = NOW(), reject_status_comment = %s WHERE id = %s", (BUNDLE_STATUS['rejected-bundles'], coordinator["id"], reason, bundle_id))
+        send_mail_queue(student["email"], "Bundle Rejected", f"Your bundle for {course['name']} has been rejected.\nReason: " + reason)
         return {"message": "Bundle rejected"}, 200
     except Exception as e:
         print(e)
@@ -612,15 +632,17 @@ def coordinator_approve_certificate(course_id, bundle_id):
         if bundle['status'] != BUNDLE_STATUS['waiting-approval']:
             return {"message": "Bundle is not waiting for certificate approval"}, 400
 
-        data = request.get_json()
-        student_id = data['student_id']
-
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE course_id = %s and student_id = %s LIMIT 1", (course_id, student_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE id = %s LIMIT 1", (bundle['enrollment_id'],))
         if not enrollment:
-            return {"message": "Student not enrolled in this course"}, 400
-
+            return {"message": "Enrollment not found"}, 404
+        
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (enrollment['student_id'],))
+        if not student:
+            return {"message": "Student not found"}, 404
+        
         db.execute("UPDATE enrollment SET is_pass = True, pass_date = NOW() WHERE id = %s", (enrollment['id'],))
-        db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['accepted-certificates'], bundle_id))
+        db.execute("UPDATE bundle SET status = %s, certificate_coordinator = %s, certificate_date = NOW() WHERE id = %s", (BUNDLE_STATUS['accepted-certificates'], coordinator_id, bundle_id))
+        send_mail_queue(student['email'], "Course Completition", f"""Your certificates has been approved. You completed the {course["name"]} course succesfully.""")
         return {"message": "Certificate approved"}, 200
     except Exception as e:
         print(e)
@@ -653,17 +675,295 @@ def coordinator_reject_certificate(course_id, bundle_id):
             return {"message": "Bundle is not waiting for certificate approval"}, 400
 
         data = request.get_json()
-        student_id = data['student_id']
+        reason = data['reason']
 
-        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE course_id = %s and student_id = %s LIMIT 1", (course_id, student_id))
+        enrollment = db.fetch_one("SELECT * FROM enrollment WHERE id = %s LIMIT 1", (bundle['enrollment_id'],))
         if not enrollment:
-            return {"message": "Student not enrolled in this course"}, 400
+            return {"message": "Enrollment not found"}, 404
+        
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (enrollment['student_id'],))
+        if not student:
+            return {"message": "Student not found"}, 404
+        
+        db.execute("UPDATE bundle SET status = %s, certificate_coordinator = %s, certificate_date = NOW(), reject_status_comment = %s WHERE id = %s", (BUNDLE_STATUS['rejected-certificates'], coordinator_id, reason, bundle_id))
 
-        db.execute("UPDATE enrollment SET is_pass = False, pass_date = NOW() WHERE id = %s", (enrollment['id'],))
+        # Create copy of bundle with the status of waiting certificates and bundle details
+        db.execute("""INSERT INTO bundle (created_at, coordinator_id, enrollment_id, status, bundle_date, complete_date)
+                      SELECT created_at, coordinator_id, enrollment_id, %s, bundle_date, complete_date
+                      FROM bundle WHERE id = %s"""
+                   ,(BUNDLE_STATUS["waiting-certificates"], bundle['id'],))
+                
+        # Get the new bundle id
+        new_bundle = db.fetch_one("SELECT * FROM bundle WHERE enrollment_id = %s AND status = %s LIMIT 1", (bundle['enrollment_id'], BUNDLE_STATUS['waiting-certificates']))
 
-        db.execute("UPDATE bundle SET status = %s WHERE id = %s", (BUNDLE_STATUS['rejected-certificates'], bundle_id))
+        bundle_details = db.fetch("SELECT * FROM bundle_detail WHERE bundle_id = %s", (bundle['id'],))
+        for bundle_detail in bundle_details:
+            db.execute("INSERT INTO bundle_detail (bundle_id, mooc_id) SELECT %s, mooc_id FROM bundle_detail WHERE id = %s", (new_bundle['id'], bundle_detail['id'],))
+
+        send_mail_queue(student['email'], "Course Completition", f"""Your certificates for {course["name"]} has been rejected. Please check your certificate URLs.\nReason: {reason}""")
         return {"message": "Certificate rejected"}, 200
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
     
+@coordinator_app.route("/course/<int:course_id>/waiting-bundles", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_waiting_bundles(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        hashed_status = BUNDLE_STATUS.get("waiting-bundles")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, m.url as mooc_url
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
+                            WHERE b.status = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
+
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/rejected-bundles", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_rejected_bundles(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        hashed_status = BUNDLE_STATUS.get("rejected-bundles")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.bundle_date as bundle_created_at, m.name as mooc_name,
+                                   m.url as mooc_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.reject_status_comment
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
+                            WHERE b.status = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
+
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@coordinator_app.route("/course/<int:course_id>/waiting-certificates", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_waiting_certificates(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        hashed_status = BUNDLE_STATUS.get("waiting-certificates")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.bundle_date as bundle_created_at, m.name as mooc_name,
+                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
+                            WHERE b.status = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
+
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/waiting-approval", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_waiting_approval(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        hashed_status = BUNDLE_STATUS.get("waiting-approval")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.complete_date, m.name as mooc_name,
+                                   m.url as mooc_url, bd.certificate_url
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            WHERE b.status = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
+
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/rejected-certificates", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_rejected_certificates(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        hashed_status = BUNDLE_STATUS.get("rejected-certificates")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.certificate_date as bundle_created_at, m.name as mooc_name,
+                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.reject_status_comment
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.certificate_coordinator = c.id
+                            WHERE b.status = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
+
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/course/<int:course_id>/accepted-certificates", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_accepted_certificates(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+
+        if course['department_id'] != department['id']:
+            return {"message": "You cannot view this course"}, 400
+
+        hashed_status = BUNDLE_STATUS.get("accepted-certificates")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+
+        # TODO: Get total bundle hours
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
+                                   s.student_no, b.id as bundle_id, b.certificate_date, bundle_date, m.name as mooc_name, e.pass_date,
+                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.comment
+                            FROM student s
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.certificate_coordinator = c.id
+                            WHERE b.status = %s and e.course_id = %s
+                            ORDER BY b.created_at DESC
+        """, (hashed_status, course_id,))
+
+        return {"bundles": bundles, "is_active": course["is_active"]}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
