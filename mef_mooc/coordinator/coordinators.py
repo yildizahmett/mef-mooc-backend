@@ -264,8 +264,7 @@ def coordinator_waiting_students(course_id):
                             INNER JOIN enrollment ON student.id = enrollment.student_id
                             WHERE enrollment.course_id = %s and enrollment.is_waiting = True) a
                             LEFT JOIN enrollment e ON e.student_id = a.id
-                            LEFT JOIN mefcourse m ON e.course_id = m.id
-                            WHERE (m.is_active = True OR e.is_pass = True) and (m.id != %s)
+                            LEFT JOIN mefcourse m ON e.course_id = m.id and m.id != %s
         """, (course_id, course_id,))
         return {"students": students}, 200
     except Exception as e:
@@ -865,7 +864,7 @@ def coordinator_course_waiting_approval(course_id):
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
                                    s.student_no, b.id as bundle_id, b.complete_date, m.name as mooc_name,
-                                   m.url as mooc_url, bd.certificate_url
+                                   m.url as mooc_url, bd.certificate_url, b.comment
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id
@@ -951,14 +950,16 @@ def coordinator_course_accepted_certificates(course_id):
         # TODO: Get total bundle hours
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.certificate_date, bundle_date, m.name as mooc_name, e.pass_date,
-                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.comment
+                                s.student_no, b.id as bundle_id, b.certificate_date, b.bundle_date, m.name as mooc_name, e.pass_date,
+                                m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as certificate_coordinator, b.comment,
+                                CONCAT(cb.name, ' ', cb.surname) as bundle_coordinator
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id
                             INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
                             INNER JOIN mooc m ON bd.mooc_id = m.id
                             LEFT JOIN coordinator c ON b.certificate_coordinator = c.id
+                            LEFT JOIN coordinator cb ON b.coordinator_id = cb.id
                             WHERE b.status = %s and e.course_id = %s
                             ORDER BY b.created_at DESC
         """, (hashed_status, course_id,))
