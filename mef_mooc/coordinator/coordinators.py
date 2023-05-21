@@ -134,6 +134,33 @@ def coordinator_possible_semesters():
         print(e)
         return {"message": "An error occured"}, 500
 
+# Current course informations
+@coordinator_app.route("/course/<int:course_id>/info", methods=['GET'])
+@coordinator_auth()
+def coordinator_course_info(course_id):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+
+        course = db.fetch_one("SELECT * FROM MEFcourse WHERE id = %s LIMIT 1", (course_id,))
+        if not course:
+            return {"message": "Course not found"}, 404
+
+        department = db.fetch_one("SELECT * FROM department WHERE id = %s LIMIT 1", (course['department_id'],))
+        if not department:
+            return {"message": "Department not found"}, 404
+
+        if department['coordinator_id'] != coordinator['id']:
+            return {"message": "You are not allowed to see this course"}, 403
+
+        return {"course": course}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
 @coordinator_app.route("/add-course", methods=['POST'])
 @coordinator_auth()
 def coordinator_add_course():
@@ -147,6 +174,9 @@ def coordinator_add_course():
         department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
         if not department:
             return {"message": "Department not found or department disabled"}, 404
+        
+        if department['coordinator_id'] != coordinator['id']:
+            return {"message": "You are not allowed to add course to this department"}, 403
 
         data = request.get_json()
         course_code = data['course_code']
@@ -208,6 +238,9 @@ def coordinator_active_courses():
         department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator['id'],))
         if not department:
             return {"message": "Department not found or department disabled"}, 404
+
+        if department['coordinator_id'] != coordinator['id']:
+            return {"message": "You are not allowed to see this course"}, 403
 
         courses = db.fetch("SELECT * FROM MEFcourse WHERE department_id = %s and is_active = True", (department['id'],))
         return {"courses": courses}, 200
@@ -371,7 +404,7 @@ def coordinator_course(course_id):
             return {"message": "You cannot view this course"}, 400
 
         students = db.fetch("""
-                            SELECT student.id, student.name, student.surname, student.email, student.student_no
+                            SELECT student.id, student.name, student.surname, student.email, student.student_no, enrollment.created_at as enroll_date
                             FROM student
                             INNER JOIN enrollment ON student.id = enrollment.student_id
                             WHERE enrollment.course_id = %s and enrollment.is_waiting = False
@@ -436,7 +469,7 @@ def coordinator_moocs():
         if not coordinator:
             return {"message": "Coordinator not found or coordinator disabled"}, 404
 
-        moocs = db.fetch("SELECT id, platform, name, url FROM mooc WHERE is_active = True")
+        moocs = db.fetch("SELECT id, average_hours, name, url FROM mooc WHERE is_active = True")
 
         return {"moocs": moocs}, 200
     except Exception as e:
@@ -598,7 +631,7 @@ def coordinator_delete_mooc(course_id, bundle_id, bundle_detail_id):
     
 @coordinator_app.route("/course/<int:course_id>/bundle/<int:bundle_id>/add-mooc", methods=['POST'])
 @coordinator_auth()
-def coordinator_add_mooc(course_id, bundle_id, bundle_detail_id):
+def coordinator_add_mooc(course_id, bundle_id):
     try:
         coordinator_id = get_jwt()['sub']['id']
         coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
@@ -613,10 +646,6 @@ def coordinator_add_mooc(course_id, bundle_id, bundle_detail_id):
         bundle = db.fetch_one("SELECT * FROM bundle WHERE id = %s LIMIT 1", (bundle_id,))
         if not bundle:
             return {"message": "Bundle not found"}, 404
-        
-        bundle_detail = db.fetch_one("SELECT * FROM bundle_detail WHERE id = %s and bundle_id = %s LIMIT 1", (bundle_detail_id, bundle_id,))
-        if not bundle_detail:
-            return {"message": "Bundle detail not found"}, 404
 
         department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
 
@@ -885,7 +914,7 @@ def coordinator_course_waiting_bundles(course_id):
         # TODO: Get total bundle hours
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, m.url as mooc_url
+                                   s.student_no, b.id as bundle_id, b.created_at as bundle_created_at, m.name as mooc_name, m.url as mooc_url, m.average_hours
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id
@@ -973,7 +1002,7 @@ def coordinator_course_waiting_certificates(course_id):
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
                                    s.student_no, b.id as bundle_id, b.bundle_date as bundle_created_at, m.name as mooc_name,
-                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name
+                                   m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.created_at as student_bundle_create_date
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id
@@ -1016,13 +1045,14 @@ def coordinator_course_waiting_approval(course_id):
         # TODO: Get total bundle hours
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.complete_date, m.name as mooc_name,
-                                   m.url as mooc_url, bd.certificate_url, b.comment
+                                   s.student_no, b.id as bundle_id, b.complete_date, m.name as mooc_name, b.bundle_date, b.created_at as student_bundle_create_date,  
+                                   m.url as mooc_url, bd.certificate_url, b.comment, CONCAT(c.name, ' ', c.surname) as bundle_coordinator
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id
                             INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
                             INNER JOIN mooc m ON bd.mooc_id = m.id
+                            LEFT JOIN coordinator c ON b.coordinator_id = c.id
                             WHERE b.status = %s and e.course_id = %s
                             ORDER BY b.created_at DESC
         """, (hashed_status, course_id,))
@@ -1059,7 +1089,7 @@ def coordinator_course_rejected_certificates(course_id):
         # TODO: Get total bundle hours
         bundles = db.fetch("""
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
-                                   s.student_no, b.id as bundle_id, b.certificate_date as bundle_created_at, m.name as mooc_name,
+                                   s.student_no, b.id as bundle_id, b.certificate_date as bundle_created_at, m.name as mooc_name, b.comment,
                                    m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as coordinator_name, b.reject_status_comment
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
@@ -1105,7 +1135,7 @@ def coordinator_course_accepted_certificates(course_id):
                             SELECT s.id as student_id, s.name as student_name, s.surname as student_surname, s.email as student_email, 
                                 s.student_no, b.id as bundle_id, b.certificate_date, b.bundle_date, m.name as mooc_name, e.pass_date,
                                 m.url as mooc_url, bd.certificate_url, CONCAT(c.name, ' ', c.surname) as certificate_coordinator, b.comment,
-                                CONCAT(cb.name, ' ', cb.surname) as bundle_coordinator
+                                CONCAT(cb.name, ' ', cb.surname) as bundle_coordinator, b.complete_date as student_complete_date, b.created_at as student_bundle_create_date
                             FROM student s
                             INNER JOIN enrollment e ON s.id = e.student_id
                             INNER JOIN bundle b ON e.id = b.enrollment_id

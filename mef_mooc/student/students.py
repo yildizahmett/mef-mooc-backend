@@ -252,7 +252,7 @@ def student_moocs():
         if not student:
             return {"message": "Student not found"}, 404
 
-        moocs = db.fetch("SELECT id, platform, name, url, average_hours FROM mooc WHERE is_active = True")
+        moocs = db.fetch("SELECT id, name, url, average_hours FROM mooc WHERE is_active = True")
         return {"moocs": moocs}, 200
     except Exception as e:
         print(e)
@@ -310,8 +310,9 @@ def student_create_bundle(course_id):
         if len(moocs) != len(mooc_ids):
             return {"message": "Invalid mooc ids"}, 400
         
+        total_course_time_message = None
         if course['credits'] * HOURS_PER_CREDIT * (1.0 - TOTAL_COURSE_TIME_TOLLERANCE) > total_course_time:
-            return {"message": "Total course time is less than required"}, 400
+            total_course_time_message = "You have to take at least {} hours of moocs".format(course['credits'] * HOURS_PER_CREDIT)
         
         try:
             bundle = db.execute("INSERT INTO bundle (enrollment_id) VALUES (%s)", (enrollment['id'],))
@@ -324,6 +325,7 @@ def student_create_bundle(course_id):
             print(e)
             return {"message": "An error occured"}, 500
 
+        message = "Bundle created successfully" + (". " + total_course_time_message if total_course_time_message else "")
         return {"message": "Bundle created successfully"}, 200
     except Exception as e:
         print(e)
@@ -352,7 +354,7 @@ def student_bundle(course_id, bundle_id):
 
         bundles = db.fetch(
             """
-            SELECT bd.id as bundle_detail_id, m.id as mooc_id, m.name as mooc_name, certificate_url
+            SELECT bd.id as bundle_detail_id, m.id as mooc_id, m.name as mooc_name, certificate_url, m.average_hours, b.status as bundle_status
             FROM bundle_detail bd
             INNER JOIN mooc m ON m.id = bd.mooc_id
             INNER JOIN bundle b ON b.id = bd.bundle_id

@@ -50,7 +50,7 @@ def invite_students():
 
         for student in students:
             email = student['email']
-            password = "asd123"
+            password = create_random_password()
             student_no = student['student_no']
             name = student['name']
             surname = student['surname']
@@ -58,7 +58,7 @@ def invite_students():
 
             student = db.fetch_one("SELECT * FROM student WHERE email = %s", (email,))
             if student:
-                continue
+                send_mail_queue(email, "MEF MOOC Invitation", f"You have been invited to MEF MOOC.\n{FRONTEND_URL}\n\nYou can login with your email and password.")
 
             hashed_password = generate_password_hash(password).decode('utf-8')
             try:
@@ -70,7 +70,7 @@ def invite_students():
             except Exception as e:
                 print(e)
 
-        #student_invite_mail_queue(student_mail_list)
+        student_invite_mail_queue(student_mail_list)
         return {"message": "Students invited"}, 200
     except Exception as e:
         print(e)
