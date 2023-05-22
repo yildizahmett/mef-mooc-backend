@@ -447,3 +447,29 @@ def student_complete_bundle(course_id, bundle_id):
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
+
+@student_app.route("/old-courses", methods=['GET'])
+@student_auth()
+def student_old_courses():
+    try:
+        student_id = get_jwt()['sub']['id']
+        student = db.fetch_one("SELECT * FROM student WHERE id = %s LIMIT 1", (student_id,))
+
+        if not student:
+            return {"message": "Student not found"}, 404
+
+        old_courses = db.fetch(
+            """
+            SELECT m.id as course_id, m.course_code, m.name, 
+                   m.semester, m.credits, e.is_pass
+                FROM enrollment e
+                INNER JOIN mefcourse m ON m.id = e.course_id
+                WHERE e.student_id = %s and m.is_active = False
+            """,
+            (student_id,)
+        )
+
+        return {"old_courses": old_courses}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
