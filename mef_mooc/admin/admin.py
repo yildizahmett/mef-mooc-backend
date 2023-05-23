@@ -206,7 +206,7 @@ def add_department():
             return {"message": "Coordinator not found"}, 404
 
         db.execute("UPDATE coordinator SET is_active = True WHERE id = %s", (coordinator_id,))
-        db.execute("INSERT INTO department (name, coordinator_id, code) VALUES (%s, %s)", (name, coordinator_id, code,))
+        db.execute("INSERT INTO department (name, coordinator_id, code) VALUES (%s, %s, %s)", (name, coordinator_id, code,))
 
         return {"message": "Department added successfully"}, 200
     except Exception as e:
@@ -444,7 +444,8 @@ def get_semester_report(semester):
             return {"message": "Semester not found"}, 404
         
         semester_report = db.fetch("""
-                        SELECT s.id as student_id, e.id as enrollment_id, d.code as department, m.name as moocs, bd.certificate_url, CONCAT(s.name, ' ', s.surname) as student_name, b.comment
+                        SELECT s.id as student_id, e.id as enrollment_id, d.code as department, m.name as moocs, m.average_hours, 
+                               bd.certificate_url, CONCAT(s.name, ' ', s.surname) as student_name, b.comment
                         FROM student s
                         INNER JOIN department d ON d.id = s.department_id
                         INNER JOIN enrollment e ON s.id = e.student_id
