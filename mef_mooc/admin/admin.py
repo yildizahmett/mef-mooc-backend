@@ -5,7 +5,7 @@ import random
 import string
 from mef_mooc.scripts.auth import admin_auth
 from mef_mooc.scripts.models import db
-from mef_mooc.scripts.util import create_random_password, student_invite_mail_queue, send_mail_queue
+from mef_mooc.scripts.util import SEMESTERS, create_random_password, student_invite_mail_queue, send_mail_queue
 from mef_mooc.scripts.constants import FRONTEND_URL
 from mef_mooc.config import ADMIN_USERNAME, ADMIN_PASSWORD, JWT_ACCESS_TOKEN_EXPIRES
 from mef_mooc.scripts.extensions import jwt_redis_blocklist
@@ -179,7 +179,7 @@ def delete_coordinator(coordinator_id):
 @admin_auth()
 def get_departments():
     try:
-        departments = db.fetch("""SELECT department.id, department.name, coordinator.name as coordinator_name, coordinator.surname as coordinator_surname 
+        departments = db.fetch("""SELECT department.id, department.code, department.name, coordinator.name as coordinator_name, coordinator.surname as coordinator_surname 
                                   FROM department
                                   INNER JOIN coordinator ON department.coordinator_id = coordinator.id
                                   """)
@@ -195,6 +195,7 @@ def add_department():
         data = request.get_json()
         name = data['name']
         coordinator_id = data['coordinator_id']
+        code = data['code']
 
         department = db.fetch_one("SELECT * FROM department WHERE name = %s LIMIT 1", (name,))
         if department:
@@ -205,7 +206,7 @@ def add_department():
             return {"message": "Coordinator not found"}, 404
 
         db.execute("UPDATE coordinator SET is_active = True WHERE id = %s", (coordinator_id,))
-        db.execute("INSERT INTO department (name, coordinator_id) VALUES (%s, %s)", (name, coordinator_id))
+        db.execute("INSERT INTO department (name, coordinator_id, code) VALUES (%s, %s)", (name, coordinator_id, code,))
 
         return {"message": "Department added successfully"}, 200
     except Exception as e:
@@ -309,7 +310,7 @@ def get_coordinator(coordinator_id):
 def get_moocs():
     try:
         moocs = db.fetch("""
-                        SELECT mooc.id, mooc.name, mooc.url, mooc.average_hours 
+                        SELECT mooc.id, mooc.name, mooc.url, mooc.average_hours, is_active 
                         FROM mooc
                         """)
         return {"moocs": moocs}, 200
@@ -392,6 +393,70 @@ def update_mooc(mooc_id):
         db.execute("UPDATE mooc SET name = %s, url = %s, average_hours = %s WHERE id = %s", (name, url, average_hours, mooc_id))
 
         return {"message": "MOOC updated successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+
+@admin_app.route("/mooc/<int:mooc_id>/change-status", methods=['POST'])
+@admin_auth()
+def delete_mooc(mooc_id):
+    try:
+        mooc = db.fetch_one("SELECT * FROM mooc WHERE id = %s LIMIT 1", (mooc_id,))
+        if not mooc:
+            return {"message": "MOOC not found"}, 404
+        
+        if mooc['is_active'] == True:
+            db.execute("UPDATE mooc SET is_active = False WHERE id = %s", (mooc_id,))
+        elif mooc['is_active'] == False:
+            db.execute("UPDATE mooc SET is_active = True WHERE id = %s", (mooc_id,))
+        else:
+            return {"message": "An error occured"}, 500
+
+        return {"message": "MOOC status changed successfully"}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+    
+@admin_app.route("/semesters", methods=['GET'])
+@admin_auth()
+def get_semesters():
+    try:
+        semesters = db.fetch("""
+                        SELECT m.id, m.course_code, m.name, m.semester, m.credits, m.created_at, m.is_active, 
+                               SUM(CASE WHEN e.is_pass IS True THEN 1 ELSE 0 END) as number_of_passed_students, 
+                               d.name as department
+                        FROM mefcourse m
+                        LEFT JOIN enrollment e ON e.course_id = m.id
+                        INNER JOIN department d ON d.id = m.department_id
+                        GROUP BY m.id, d.name
+                        """)
+        return {"semesters": semesters}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+@admin_app.route("/semester-report/<semester>", methods=['GET'])
+@admin_auth()
+def get_semester_report(semester):
+    try:
+        if semester not in SEMESTERS:
+            return {"message": "Semester not found"}, 404
+        
+        semester_report = db.fetch("""
+                        SELECT s.id as student_id, e.id as enrollment_id, d.code as department, m.name as moocs, bd.certificate_url, CONCAT(s.name, ' ', s.surname) as student_name, b.comment
+                        FROM student s
+                        INNER JOIN department d ON d.id = s.department_id
+                        INNER JOIN enrollment e ON s.id = e.student_id
+                        INNER JOIN mefcourse c ON c.id = e.course_id
+                        INNER JOIN bundle b ON e.id = b.enrollment_id
+                        INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                        INNER JOIN mooc m ON bd.mooc_id = m.id
+                        WHERE b.status = 'Accepted Certificates' and c.semester = %s
+                        """, (semester,))
+        
+        return {"semester_report": semester_report}, 200
+    
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500

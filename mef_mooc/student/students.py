@@ -60,8 +60,8 @@ def student_forgot_password():
         db.execute("UPDATE student SET password = %s WHERE id = %s", (hashed_password, student['id']))
         send_mail_queue(
             email, 
-            "MEF MOOC Şifre Sıfırlama", 
-            "MEF MOOC şifreniz başarıyla sıfırlandı.\nYeni Şifreniz: " + password)
+            "MEF MOOC Password Reset", 
+            "Your MEF MOOC password reset succesfully.\nNew password: " + password)
         
         return {"message": "Password reset mail sent"}, 200
     except Exception as e:
@@ -122,7 +122,7 @@ def student_courses():
             return {"message": "Student not found"}, 404
 
         courses = db.fetch("""
-                            SELECT id, name, course_code
+                            SELECT id, name, course_code, semester, credits
                             FROM MEFcourse m
                             WHERE m.department_id = %s and m.is_active = True
                                 and NOT EXISTS(SELECT 1 FROM enrollment
@@ -192,7 +192,7 @@ def student_enrollments():
             return {"message": "Student not found"}, 404
 
         enrollments = db.fetch(
-            """SELECT e.id as enrolment_id, e.is_waiting, c.id as course_id, c.name, c.course_code
+            """SELECT e.id as enrolment_id, e.is_waiting, c.id as course_id, c.name, c.course_code, c.semester, c.credits
                FROM enrollment e
                INNER JOIN MEFcourse c ON c.id = e.course_id
                WHERE e.student_id = %s and c.is_active = True

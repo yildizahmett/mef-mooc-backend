@@ -62,8 +62,8 @@ def coordinator_forgot_password():
 
         send_mail_queue(
             email,
-            "MEF MOOC Şifre Sıfırlama",
-            "MEF MOOC şifreniz başarıyla sıfırlandı.\nYeni şifreniz: " + password
+            "MEF MOOC Password Reset",
+            "Your MEF MOOC password reset succesfully.\nNew password: " + password
         )
 
         return {"message": "Password reset successfully"}, 200
@@ -188,6 +188,9 @@ def coordinator_add_course():
         course = db.fetch_one("SELECT * FROM MEFcourse WHERE course_code = %s and semester = %s and name = %s and department_id = %s LIMIT 1", (course_code, semester, name,department['id'],))
         if course:
             return {"message": "Course already exists"}, 400
+
+        if not isinstance(credits, int):
+            return {"message": "Credits must be integer"}, 400
 
         db.execute("INSERT INTO MEFcourse (course_code, name, type, semester, credits, department_id, coordinator_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", 
                     (course_code, name, type, semester, credits, department['id'], coordinator_id))
