@@ -75,3 +75,22 @@ def send_mail_queue(email, subject, body):
     
     connection.close()
 
+def db_exec_queue(query, params=()):
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+    except Exception as e:
+        print(e)
+        return
+    
+    channel = connection.channel()
+    channel.queue_declare(queue='db_exec')
+
+    body = {
+        'query': query,
+        'params': params
+    }
+
+    channel.basic_publish(exchange='', routing_key='db_exec', body=str(body))
+    
+    connection.close()
+

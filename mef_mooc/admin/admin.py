@@ -3,9 +3,11 @@ from flask_bcrypt import generate_password_hash
 from flask_jwt_extended import create_access_token, get_jwt
 import random
 import string
+
 from mef_mooc.scripts.auth import admin_auth
 from mef_mooc.scripts.models import db
-from mef_mooc.scripts.util import SEMESTERS, create_random_password, student_invite_mail_queue, send_mail_queue
+from mef_mooc.scripts.util import (SEMESTERS, create_random_password, student_invite_mail_queue, 
+                                   send_mail_queue, db_exec_queue)
 from mef_mooc.scripts.constants import FRONTEND_URL
 from mef_mooc.config import ADMIN_USERNAME, ADMIN_PASSWORD, JWT_ACCESS_TOKEN_EXPIRES
 from mef_mooc.scripts.extensions import jwt_redis_blocklist
@@ -48,6 +50,7 @@ def invite_students():
         students = data['students']
         student_mail_list = list()
 
+        query = "INSERT INTO student (email, password, student_no, name, surname, department_id) VALUES "
         for student in students:
             email = student['email']
             password = create_random_password()
@@ -61,15 +64,16 @@ def invite_students():
                 send_mail_queue(email, "MEF MOOC Invitation", f"You have been invited to MEF MOOC.\n{FRONTEND_URL}\n\nYou can login with your email and password.")
 
             hashed_password = generate_password_hash(password).decode('utf-8')
-            try:
-                db.execute("INSERT INTO student (email, password, student_no, name, surname, department_id) VALUES (%s, %s, %s, %s, %s, %s)", (email, hashed_password, student_no, name, surname, department_id))
-                student_mail_list.append({
-                    'email': email,
-                    'password': password,
-                })
-            except Exception as e:
-                print(e)
+            
+            query += f"('{email}', '{hashed_password}', '{student_no}', '{name}', '{surname}', {department_id}), "
 
+            student_mail_list.append({
+                'email': email,
+                'password': password,
+            })
+
+        query = query[:-2]
+        db.execute(query)
         student_invite_mail_queue(student_mail_list)
         return {"message": "Students invited"}, 200
     except Exception as e:
@@ -325,18 +329,42 @@ def add_moocs():
         data = request.get_json()
         moocs = data['moocs']
 
+        if not moocs:
+            return {"message": "Moocs not found"}, 404
+
         incorrect_moocs = []
 
         query = "INSERT INTO mooc (name, url, average_hours) VALUES "
         mooc_check_count = 0
         for mooc in moocs:
-            mooc_check = db.fetch_one("SELECT * FROM mooc WHERE name = %s LIMIT 1", (mooc['name'],))
-            if mooc_check:
-                mooc_check_count += 1
-                continue
-
+            
             if not mooc['name'] or not mooc['url'] or not mooc['average_hours']:
                 incorrect_moocs.append(mooc['name'])
+                continue
+
+            if not isinstance(mooc['name'], str) or not isinstance(mooc['url'], str):
+                incorrect_moocs.append(mooc['name'])
+                continue
+
+            if not isinstance(mooc['average_hours'], int):
+                incorrect_moocs.append(mooc['name'])
+                continue
+
+            if mooc['average_hours'] < 0:
+                incorrect_moocs.append(mooc['name'])
+                continue
+
+            if mooc['name'] == "" or mooc['url'] == "":
+                incorrect_moocs.append(mooc['name'])
+                continue
+
+            if mooc['url'][:4] != "http":
+                incorrect_moocs.append(mooc['name'])
+                continue
+
+            mooc_check = db.fetch_one("SELECT * FROM mooc WHERE name = %s and url = %s LIMIT 1", (mooc['name'], mooc['url']))
+            if mooc_check:
+                mooc_check_count += 1
                 continue
             
             query += f"('{mooc['name']}', '{mooc['url']}', {mooc['average_hours']}),"
