@@ -54,14 +54,15 @@ def invite_students():
         for student in students:
             email = student['email']
             password = create_random_password()
-            student_no = student['student_no']
-            name = student['name']
-            surname = student['surname']
+            student_no = str(student['student_no'])            
+            name = student['name'].replace("'", "''")
+            surname = student['surname'].replace("'", "''")
             department_id = student['department_id']
 
-            student = db.fetch_one("SELECT * FROM student WHERE email = %s", (email,))
+            student = db.fetch_one("SELECT * FROM student WHERE email = %s OR student_no = %s", (email, student_no))
             if student:
                 send_mail_queue(email, "MEF MOOC Invitation", f"You have been invited to MEF MOOC.\n{FRONTEND_URL}\n\nYou can login with your email and password.")
+                continue
 
             hashed_password = generate_password_hash(password).decode('utf-8')
             
@@ -85,8 +86,8 @@ def invite_students():
 def add_coordinator():
     try:
         data = request.get_json()
-        name = data['name']
-        surname = data['surname']
+        name = data['name'].replace("'", "''")
+        surname = data['surname'].replace("'", "''")
         email = data['email']
         password = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
