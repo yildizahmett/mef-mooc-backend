@@ -1154,3 +1154,47 @@ def coordinator_course_accepted_certificates(course_id):
     except Exception as e:
         print(e)
         return {"message": "An error occured"}, 500
+    
+@coordinator_app.route("/semesters/<semester>/report", methods=['GET'])
+@coordinator_auth()
+def coordinator_semester_report(semester):
+    try:
+        coordinator_id = get_jwt()['sub']['id']
+        coordinator = db.fetch_one("SELECT * FROM coordinator WHERE id = %s and is_active = True LIMIT 1", (coordinator_id,))
+
+        if not coordinator:
+            return {"message": "Coordinator not found or coordinator disabled"}, 404
+        
+        department = db.fetch_one("SELECT * FROM department WHERE coordinator_id = %s LIMIT 1", (coordinator_id,))
+        if not department:
+            return {"message": "Department not found"}, 404
+
+        if semester not in SEMESTERS:
+            return {"message": "Semester not found"}, 404
+        
+        hashed_status = BUNDLE_STATUS.get("accepted-certificates")
+
+        if not hashed_status:
+            return {"message": "Status not found"}, 404
+        
+        bundles = db.fetch("""
+                            SELECT s.id as student_id, CONCAT(s.name, ' ', s.surname) as student_name, s.student_no,
+                                    e.id as enrollment_id, m.name as moocs, m.average_hours, c.credits as total_ects, 
+                                    c.course_code, c.name as course_name, bd.certificate_url, b.comment
+                            FROM student s
+                            INNER JOIN department d ON d.id = s.department_id
+                            INNER JOIN enrollment e ON s.id = e.student_id
+                            INNER JOIN mefcourse c ON c.id = e.course_id
+                            INNER JOIN bundle b ON e.id = b.enrollment_id
+                            INNER JOIN bundle_detail bd ON b.id = bd.bundle_id
+                            INNER JOIN mooc m ON bd.mooc_id = m.id
+                            WHERE b.status = %s and c.semester = %s
+                                and d.coordinator_id = %s
+                            """, (hashed_status, semester, coordinator_id,))
+        
+        return {"bundles": bundles}, 200
+    except Exception as e:
+        print(e)
+        return {"message": "An error occured"}, 500
+
+        
